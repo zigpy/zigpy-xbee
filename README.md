@@ -1,4 +1,4 @@
-# zigpy
+# zigpy-xbee
 
 [![Build Status](https://travis-ci.org/zigpy/zigpy-xbee.svg?branch=master)](https://travis-ci.org/zigpy/zigpy-xbee)
 [![Coverage](https://coveralls.io/repos/github/zigpy/zigpy-xbee/badge.svg?branch=master)](https://coveralls.io/github/zigpy/zigpy-xbee?branch=master)
