@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="zigpy-xbee",
-    version="0.0.1",
+    version="0.0.2",
     description="A library which communicates with XBee radios for zigpy",
     url="http://github.com/zigpy/zigpy-xbee",
     author="Russell Cloran",
