@@ -177,6 +177,7 @@ class XBee:
         return self._command(name, self._seq, *args)
 
     def _at_command(self, name, *args):
+        LOGGER.debug("AT command: %s %s", name, args)
         data = t.serialize(args, (AT_COMMANDS[name], ))
         return self._command(
             'at',

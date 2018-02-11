@@ -23,8 +23,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._nwk = 0
 
     @asyncio.coroutine
-    def initialize(self):
-        """Perform basic radio initialization"""
+    def startup(self, auto_form=False):
+        """Perform a complete application startup"""
         yield from self._api._at_command('AP', 2)  # Ensure we have escaped commands
         yield from self._api._at_command('AO', 0x03)
 
@@ -32,14 +32,22 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         serial_low = yield from self._api._at_command('SL')
         as_bytes = serial_high.to_bytes(4, 'big') + serial_low.to_bytes(4, 'big')
         self._ieee = zigpy.types.EUI64([zigpy.types.uint8_t(b) for b in as_bytes])
+        LOGGER.debug("Read local IEEE address as %s", self._ieee)
 
-    @asyncio.coroutine
-    def startup(self, auto_form=False):
-        """Perform a complete application startup"""
-        yield from self.initialize()
+        association_state = yield from self._api._at_command('AI')
+        while association_state == 0xFF:
+            LOGGER.debug("Waiting for radio startup...")
+            yield from asyncio.sleep(0.2)
+            association_state = yield from self._api._at_command('AI')
+
+        self._nwk = yield from self._api._at_command('MY')
+
+        if auto_form and not (association_state == 0 and self._nwk == 0):
+            yield from self.form_network()
 
     @asyncio.coroutine
     def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
+        LOGGER.info("Forming network on channel %s", channel)
         yield from self._api._at_command('AI')
 
         scan_bitmask = 1 << (channel - 11)
@@ -53,11 +61,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         yield from self._api._at_command('AC')
         yield from self._api._at_command('CE', 1)
 
-        # When the coordinator has successfully started a network, it
-        #  Allows other devices to join the network for a time (see NJ command)
-        #  Sets AI=0
-        #  Starts blinking the Associate LED
-        #  Sends an API modem status frame (“coordinator started”) out the UART (API firmware only)
+        self._nwk = yield from self._api._at_command('MY')
 
     @zigpy.util.retryable_request
     @asyncio.coroutine
