@@ -7,7 +7,6 @@ import zigpy.util
 import zigpy.zcl
 import zigpy.zdo
 
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -46,7 +45,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             yield from self.form_network()
 
     @asyncio.coroutine
-    def form_network(self, channel=15, pan_id=None, extended_pan_id=None, channel_mask = None):
+    def form_network(self, channel=15, pan_id=None, extended_pan_id=None, channel_mask=None):
         LOGGER.info("Forming network on channel %s", channel)
 
         yield from self._api._at_command('AI')
@@ -66,7 +65,6 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         yield from self._api._at_command('WR')
 
-
         self._nwk = yield from self._api._at_command('MY')
 
     @zigpy.util.retryable_request
@@ -77,16 +75,16 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         reply_fut = asyncio.Future()
         self._pending[sequence] = reply_fut
         self._api._seq_command(
-            'tx_explicit',
-            self._devices_by_nwk[nwk],
-            nwk,
-            src_ep,
-            dst_ep,
-            cluster,
-            profile,
-            0,
-            0x20,
-            data,
+                'tx_explicit',
+                self._devices_by_nwk[nwk],
+                nwk,
+                src_ep,
+                dst_ep,
+                cluster,
+                profile,
+                0,
+                0x20,
+                data,
         )
         v = yield from asyncio.wait_for(reply_fut, timeout)
         return v

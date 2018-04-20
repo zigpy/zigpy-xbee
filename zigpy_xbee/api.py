@@ -6,29 +6,31 @@ from . import types as t
 
 LOGGER = logging.getLogger(__name__)
 
-
 # https://www.digi.com/resources/documentation/digidocs/PDFs/90000976.pdf
 COMMANDS = {
-    'at': (0x08, (t.uint8_t, t.ATCommand, t.Bytes), 0x88),
-    'queued_at': (0x09, (), None),
-    'remote_at': (0x17, (), None),
-    'tx': (0x10, (), None),
-    'tx_explicit': (0x11, (t.uint8_t, t.EUI64, t.uint16_t, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), None),
-    'create_source_route': (0x21, (), None),
+    'at'                     : (0x08, (t.uint8_t, t.ATCommand, t.Bytes), 0x88),
+    'queued_at'              : (0x09, (), None),
+    'remote_at'              : (0x17, (), None),
+    'tx'                     : (0x10, (), None),
+    'tx_explicit'            : (0x11, (
+    t.uint8_t, t.EUI64, t.uint16_t, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes),
+                                None),
+    'create_source_route'    : (0x21, (), None),
     'register_joining_device': (0x24, (), None),
 
-    'at_response': (0x88, (t.uint8_t, t.ATCommand, t.uint8_t, t.Bytes), None),
-    'modem_status': (0x8A, (t.uint8_t, ), None),
-    'tx_status': (0x8B, (t.uint8_t, t.uint16_t, t.uint8_t, t.uint8_t, t.uint8_t), None),
-    'route_information': (0x8D, (), None),
-    'rx': (0x90, (), None),
-    'explicit_rx_indicator': (0x91, (t.EUI64, t.uint16_t, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.Bytes), None),
-    'rx_io_data_long_addr': (0x92, (), None),
-    'remote_at_response': (0x97, (), None),
-    'extended_status': (0x98, (), None),
-    'route_record_indicator': (0xA1, (), None),
-    'many_to_one_rri': (0xA3, (), None),
-    'node_id_indicator': (0x95, (), None),
+    'at_response'            : (0x88, (t.uint8_t, t.ATCommand, t.uint8_t, t.Bytes), None),
+    'modem_status'           : (0x8A, (t.uint8_t,), None),
+    'tx_status'              : (0x8B, (t.uint8_t, t.uint16_t, t.uint8_t, t.uint8_t, t.uint8_t), None),
+    'route_information'      : (0x8D, (), None),
+    'rx'                     : (0x90, (), None),
+    'explicit_rx_indicator'  : (
+    0x91, (t.EUI64, t.uint16_t, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.Bytes), None),
+    'rx_io_data_long_addr'   : (0x92, (), None),
+    'remote_at_response'     : (0x97, (), None),
+    'extended_status'        : (0x98, (), None),
+    'route_record_indicator' : (0xA1, (), None),
+    'many_to_one_rri'        : (0xA3, (), None),
+    'node_id_indicator'      : (0x95, (), None),
 
 }
 
@@ -144,6 +146,7 @@ AT_COMMANDS = {
     'CE': t.uint8_t,
 }
 
+
 class XBee:
     MODEM_STATUS_CODES = {
         0x00: 'Hardware reset',
@@ -155,6 +158,7 @@ class XBee:
         0x0D: 'Voltage supply limit exceeded (PRO S2B only)',
         0x11: 'Modem configuration changed while join in progress',
     }
+
     def __init__(self):
         self._uart = None
         self._seq = 1
@@ -177,7 +181,7 @@ class XBee:
         future = None
         if needs_response:
             future = asyncio.Future()
-            self._awaiting[self._seq] = (future, )
+            self._awaiting[self._seq] = (future,)
         self._seq = (self._seq % 255) + 1
         return future
 
@@ -187,12 +191,12 @@ class XBee:
 
     def _at_command(self, name, *args):
         LOGGER.debug("AT command: %s %s", name, args)
-        data = t.serialize(args, (AT_COMMANDS[name], ))
+        data = t.serialize(args, (AT_COMMANDS[name],))
         return self._command(
-            'at',
-            self._seq,
-            name.encode('ascii'),
-            data,
+                'at',
+                self._seq,
+                name.encode('ascii'),
+                data,
         )
 
     def _api_frame(self, name, *args):
@@ -203,7 +207,7 @@ class XBee:
         command = self._commands_by_id[data[0]]
         LOGGER.debug("Frame received: %s", command)
         data, rest = t.deserialize(data[1:], COMMANDS[command][1])
-        getattr(self, '_handle_%s' % (command, ))(data)
+        getattr(self, '_handle_%s' % (command,))(data)
 
     def _handle_at_response(self, data):
         fut, = self._awaiting.pop(data[0])
