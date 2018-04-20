@@ -46,20 +46,26 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             yield from self.form_network()
 
     @asyncio.coroutine
-    def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
+    def form_network(self, channel=15, pan_id=None, extended_pan_id=None, channel_mask = None):
         LOGGER.info("Forming network on channel %s", channel)
+
         yield from self._api._at_command('AI')
 
-        scan_bitmask = 1 << (channel - 11)
+        if channel_mask is None:
+            scan_bitmask = 1 << (channel - 11)
+        else:
+            scan_bitmask = channel_mask
+
         yield from self._api._at_command('ZS', 2)
         yield from self._api._at_command('SC', scan_bitmask)
         yield from self._api._at_command('EE', 1)
         yield from self._api._at_command('EO', 2)
         yield from self._api._at_command('NK', 0)
         yield from self._api._at_command('KY', b'ZigBeeAlliance09')
-        yield from self._api._at_command('WR')
-        yield from self._api._at_command('AC')
         yield from self._api._at_command('CE', 1)
+
+        yield from self._api._at_command('WR')
+
 
         self._nwk = yield from self._api._at_command('MY')
 
@@ -93,7 +99,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         yield from self._api._at_command('CB', 2)
 
     def handle_modem_status(self, status):
-        LOGGER.info("Modem status update: %s", status)
+        LOGGER.info("Modem status update: %s -> %s", status, self._api.MODEM_STATUS_CODES[status])
 
     def handle_rx(self, src_ieee, src_nwk, src_ep, dst_ep, cluster_id, profile_id, rxopts, data):
         self._devices_by_nwk[src_nwk] = src_ieee

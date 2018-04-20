@@ -144,8 +144,17 @@ AT_COMMANDS = {
     'CE': t.uint8_t,
 }
 
-
 class XBee:
+    MODEM_STATUS_CODES = {
+        0x00: 'Hardware reset',
+        0x01: 'Watchdog timer reset',
+        0x02: 'Joined network (routers and end devices)',
+        0x03: 'Disassociated',
+        0x06: 'Coordinator started',
+        0x07: 'Network security key was updated',
+        0x0D: 'Voltage supply limit exceeded (PRO S2B only)',
+        0x11: 'Modem configuration changed while join in progress',
+    }
     def __init__(self):
         self._uart = None
         self._seq = 1
