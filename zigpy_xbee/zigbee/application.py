@@ -22,50 +22,47 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         self._nwk = 0
 
-    @asyncio.coroutine
-    def startup(self, auto_form=False):
+    async def startup(self, auto_form=False):
         """Perform a complete application startup"""
-        yield from self._api._at_command('AP', 2)  # Ensure we have escaped commands
-        yield from self._api._at_command('AO', 0x03)
+        await self._api._at_command('AP', 2)  # Ensure we have escaped commands
+        await self._api._at_command('AO', 0x03)
 
-        serial_high = yield from self._api._at_command('SH')
-        serial_low = yield from self._api._at_command('SL')
+        serial_high = await self._api._at_command('SH')
+        serial_low = await self._api._at_command('SL')
         as_bytes = serial_high.to_bytes(4, 'big') + serial_low.to_bytes(4, 'big')
         self._ieee = zigpy.types.EUI64([zigpy.types.uint8_t(b) for b in as_bytes])
         LOGGER.debug("Read local IEEE address as %s", self._ieee)
 
-        association_state = yield from self._api._at_command('AI')
+        association_state = await self._api._at_command('AI')
         while association_state == 0xFF:
             LOGGER.debug("Waiting for radio startup...")
-            yield from asyncio.sleep(0.2)
-            association_state = yield from self._api._at_command('AI')
+            await asyncio.sleep(0.2)
+            association_state = await self._api._at_command('AI')
 
-        self._nwk = yield from self._api._at_command('MY')
+        self._nwk = await self._api._at_command('MY')
 
         if auto_form and not (association_state == 0 and self._nwk == 0):
-            yield from self.form_network()
+            await self.form_network()
 
-    @asyncio.coroutine
-    def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
+    async def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
         LOGGER.info("Forming network on channel %s", channel)
-        yield from self._api._at_command('AI')
+        await self._api._at_command('AI')
 
         scan_bitmask = 1 << (channel - 11)
-        yield from self._api._at_command('ZS', 2)
-        yield from self._api._at_command('SC', scan_bitmask)
-        yield from self._api._at_command('EE', 1)
-        yield from self._api._at_command('EO', 2)
-        yield from self._api._at_command('NK', 0)
-        yield from self._api._at_command('KY', b'ZigBeeAlliance09')
-        yield from self._api._at_command('WR')
-        yield from self._api._at_command('AC')
-        yield from self._api._at_command('CE', 1)
+        await self._api._at_command('ZS', 2)
+        await self._api._at_command('SC', scan_bitmask)
+        await self._api._at_command('EE', 1)
+        await self._api._at_command('EO', 2)
+        await self._api._at_command('NK', 0)
+        await self._api._at_command('KY', b'ZigBeeAlliance09')
+        await self._api._at_command('WR')
+        await self._api._at_command('AC')
+        await self._api._at_command('CE', 1)
 
-        self._nwk = yield from self._api._at_command('MY')
+        self._nwk = await self._api._at_command('MY')
 
     @zigpy.util.retryable_request
-    @asyncio.coroutine
-    def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
+    async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
         LOGGER.debug("Zigbee request seq %s", sequence)
         assert sequence not in self._pending
         reply_fut = asyncio.Future()
@@ -82,15 +79,14 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             0x20,
             data,
         )
-        v = yield from asyncio.wait_for(reply_fut, timeout)
+        v = await asyncio.wait_for(reply_fut, timeout)
         return v
 
-    @asyncio.coroutine
-    def permit(self, time_s=60):
+    async def permit(self, time_s=60):
         assert 0 <= time_s <= 254
-        yield from self._api._at_command('NJ', time_s)
-        yield from self._api._at_command('AC')
-        yield from self._api._at_command('CB', 2)
+        await self._api._at_command('NJ', time_s)
+        await self._api._at_command('AC')
+        await self._api._at_command('CB', 2)
 
     def handle_modem_status(self, status):
         LOGGER.info("Modem status update: %s", status)
