@@ -153,10 +153,9 @@ class XBee:
         self._awaiting = {}
         self._app = None
 
-    @asyncio.coroutine
-    def connect(self, device, baudrate=115200):
+    async def connect(self, device, baudrate=115200):
         assert self._uart is None
-        self._uart = yield from uart.connect(device, baudrate, self)
+        self._uart = await uart.connect(device, baudrate, self)
 
     def close(self):
         return self._uart.close()

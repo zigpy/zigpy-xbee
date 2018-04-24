@@ -106,15 +106,14 @@ class Gateway(asyncio.Protocol):
         return 0xFF - (sum(data) % 0x100)
 
 
-@asyncio.coroutine
-def connect(port, baudrate, api, loop=None):
+async def connect(port, baudrate, api, loop=None):
     if loop is None:
         loop = asyncio.get_event_loop()
 
     connected_future = asyncio.Future()
     protocol = Gateway(api, connected_future)
 
-    transport, protocol = yield from serial_asyncio.create_serial_connection(
+    transport, protocol = await serial_asyncio.create_serial_connection(
         loop,
         lambda: protocol,
         url=port,
@@ -124,6 +123,6 @@ def connect(port, baudrate, api, loop=None):
         xonxoff=False,
     )
 
-    yield from connected_future
+    await connected_future
 
     return protocol
