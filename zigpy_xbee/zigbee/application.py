@@ -89,7 +89,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._api._at_command('CB', 2)
 
     def handle_modem_status(self, status):
-        LOGGER.info("Modem status update: %s", status)
+        LOGGER.info("Modem status update: %s (%s)", self._api.MODEM_STATUS.get(status, 'Unknown'), status)
 
     def handle_rx(self, src_ieee, src_nwk, src_ep, dst_ep, cluster_id, profile_id, rxopts, data):
         self._devices_by_nwk[src_nwk] = src_ieee
