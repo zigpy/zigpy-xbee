@@ -1,11 +1,10 @@
 import asyncio
+import binascii
 import logging
 
 import zigpy.application
 import zigpy.types
 import zigpy.util
-import zigpy.zcl
-import zigpy.zdo
 
 
 LOGGER = logging.getLogger(__name__)
@@ -93,13 +92,13 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
     def handle_rx(self, src_ieee, src_nwk, src_ep, dst_ep, cluster_id, profile_id, rxopts, data):
         self._devices_by_nwk[src_nwk] = src_ieee
+        device = self.get_device(nwk=src_nwk)
 
-        if dst_ep == 0:
-            deserialize = zigpy.zdo.deserialize
-        else:
-            deserialize = zigpy.zcl.deserialize
-
-        tsn, command_id, is_reply, args = deserialize(cluster_id, data)
+        try:
+            tsn, command_id, is_reply, args = self.deserialize(device, src_ep, cluster_id, data)
+        except ValueError as e:
+            LOGGER.error("Failed to parse message (%s) on cluster %d, because %s", binascii.hexlify(data), cluster_id, e)
+            return
 
         if is_reply:
             self._handle_reply(src_nwk, profile_id, cluster_id, src_ep, dst_ep, tsn, command_id, args)
@@ -109,7 +108,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 self.handle_join(src_nwk, ember_ieee, 0)
             else:
                 self.devices[ember_ieee].nwk = src_nwk
-            self.handle_message(False, src_nwk, profile_id, cluster_id, src_ep, dst_ep, tsn, command_id, args)
+            self.handle_message(device, False, profile_id, cluster_id, src_ep, dst_ep, tsn, command_id, args)
 
     def _handle_reply(self, sender, profile, cluster, src_ep, dst_ep, tsn, command_id, args):
         try:
