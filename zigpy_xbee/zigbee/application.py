@@ -101,7 +101,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             return
 
         if is_reply:
-            self._handle_reply(src_nwk, profile_id, cluster_id, src_ep, dst_ep, tsn, command_id, args)
+            self._handle_reply(device, profile_id, cluster_id, src_ep, dst_ep, tsn, command_id, args)
         else:
             ember_ieee = zigpy.types.EUI64(src_ieee)
             if src_ieee not in self.devices:
@@ -110,7 +110,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 self.devices[ember_ieee].nwk = src_nwk
             self.handle_message(device, False, profile_id, cluster_id, src_ep, dst_ep, tsn, command_id, args)
 
-    def _handle_reply(self, sender, profile, cluster, src_ep, dst_ep, tsn, command_id, args):
+    def _handle_reply(self, device, profile, cluster, src_ep, dst_ep, tsn, command_id, args):
         try:
             reply_fut = self._pending[tsn]
             if reply_fut:
@@ -124,4 +124,4 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             # We've already handled, don't drop through to device handler
             return
 
-        self.handle_message(True, sender, profile, cluster, src_ep, dst_ep, tsn, command_id, args)
+        self.handle_message(device, True, profile, cluster, src_ep, dst_ep, tsn, command_id, args)
