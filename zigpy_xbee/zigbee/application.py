@@ -91,8 +91,16 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         LOGGER.info("Modem status update: %s (%s)", self._api.MODEM_STATUS.get(status, 'Unknown'), status)
 
     def handle_rx(self, src_ieee, src_nwk, src_ep, dst_ep, cluster_id, profile_id, rxopts, data):
+        if src_nwk == 0:
+            # I'm not sure why we've started seeing ZDO requests from ourself.
+            # Ignore for now.
+            return
+
+        ember_ieee = zigpy.types.EUI64(src_ieee)
+        if ember_ieee not in self.devices:
+            self.handle_join(src_nwk, ember_ieee, 0)  # TODO: Parent nwk
         self._devices_by_nwk[src_nwk] = src_ieee
-        device = self.get_device(nwk=src_nwk)
+        device = self.get_device(ember_ieee)
 
         try:
             tsn, command_id, is_reply, args = self.deserialize(device, src_ep, cluster_id, data)
@@ -103,11 +111,6 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         if is_reply:
             self._handle_reply(device, profile_id, cluster_id, src_ep, dst_ep, tsn, command_id, args)
         else:
-            ember_ieee = zigpy.types.EUI64(src_ieee)
-            if src_ieee not in self.devices:
-                self.handle_join(src_nwk, ember_ieee, 0)
-            else:
-                self.devices[ember_ieee].nwk = src_nwk
             self.handle_message(device, False, profile_id, cluster_id, src_ep, dst_ep, tsn, command_id, args)
 
     def _handle_reply(self, device, profile, cluster, src_ep, dst_ep, tsn, command_id, args):
