@@ -68,7 +68,7 @@ def test_rx_failed_deserialize(app, caplog):
     app.deserialize = mock.MagicMock(side_effect=ValueError)
 
     app.handle_rx(
-        mock.sentinel.src_ieee,
+        range(8),
         mock.sentinel.src_nwk,
         mock.sentinel.src_ep,
         mock.sentinel.dst_ep,
