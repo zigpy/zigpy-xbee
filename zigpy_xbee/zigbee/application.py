@@ -17,7 +17,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         api.set_application(self)
 
         self._pending = {}
-        self._devices_by_nwk = {}
+        self._devices_by_nwk = {d.nwk: d.ieee for a, d in self.devices.items()}
 
         self._nwk = 0
 
