@@ -43,6 +43,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         if auto_form and not (association_state == 0 and self._nwk == 0):
             await self.form_network()
 
+    async def force_remove(self, dev):
+        """Forcibly remove device from NCP."""
+        pass
+
     async def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
         LOGGER.info("Forming network on channel %s", channel)
         await self._api._at_command('AI')
