@@ -1,3 +1,4 @@
+import asyncio
 from unittest import mock
 
 import pytest
@@ -82,3 +83,22 @@ def test_rx_failed_deserialize(app, caplog):
 
     assert app._handle_reply.call_count == 0
     assert app.handle_message.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_broadcast(app):
+    (profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data) = (
+        0x260, 1, 2, 3, 0x0100, 0x06, 210, b'\x02\x01\x00'
+    )
+
+    app._api._seq_command = mock.MagicMock(
+        side_effect=asyncio.coroutine(mock.MagicMock())
+    )
+
+    await app.broadcast(
+        profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data)
+    assert app._api._seq_command.call_count == 1
+    assert app._api._seq_command.call_args[0][0] == 'tx_explicit'
+    assert app._api._seq_command.call_args[0][3] == src_ep
+    assert app._api._seq_command.call_args[0][4] == dst_ep
+    assert app._api._seq_command.call_args[0][0] == data
