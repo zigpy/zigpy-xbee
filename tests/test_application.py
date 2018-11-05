@@ -101,4 +101,4 @@ async def test_broadcast(app):
     assert app._api._seq_command.call_args[0][0] == 'tx_explicit'
     assert app._api._seq_command.call_args[0][3] == src_ep
     assert app._api._seq_command.call_args[0][4] == dst_ep
-    assert app._api._seq_command.call_args[0][0] == data
+    assert app._api._seq_command.call_args[0][9] == data
