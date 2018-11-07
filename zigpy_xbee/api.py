@@ -6,6 +6,8 @@ from . import types as t
 
 LOGGER = logging.getLogger(__name__)
 
+AT_COMMAND_TIMEOUT = 2
+
 
 # https://www.digi.com/resources/documentation/digidocs/PDFs/90000976.pdf
 COMMANDS = {
@@ -144,6 +146,18 @@ AT_COMMANDS = {
     'CE': t.uint8_t,
 }
 
+BAUDRATE_TO_BD = {
+    1200: 'ATBD0',
+    2400: 'ATBD1',
+    4800: 'ATBD2',
+    9600: 'ATBD3',
+    19200: 'ATBD4',
+    38400: 'ATBD5',
+    57600: 'ATBD6',
+    115200: 'ATBD7',
+    230400: 'ATBD8',
+}
+
 
 class XBee:
     MODEM_STATUS = {
@@ -163,6 +177,7 @@ class XBee:
         self._commands_by_id = {v[0]: k for k, v in COMMANDS.items()}
         self._awaiting = {}
         self._app = None
+        self._cmd_mode_future = None
 
     async def connect(self, device, baudrate=115200):
         assert self._uart is None
@@ -196,15 +211,16 @@ class XBee:
             data,
         )
 
-    def _at_command(self, name, *args):
+    async def _at_command(self, name, *args):
         LOGGER.debug("AT command: %s %s", name, args)
         data = t.serialize(args, (AT_COMMANDS[name], ))
-        return self._command(
-            'at',
-            self._seq,
-            name.encode('ascii'),
-            data,
-        )
+        try:
+            return await asyncio.wait_for(
+                self._command('at', self._seq, name.encode('ascii'), data,),
+                timeout=AT_COMMAND_TIMEOUT)
+        except asyncio.TimeoutError:
+            LOGGER.warning("No response to %s command", name)
+            raise
 
     def _api_frame(self, name, *args):
         c = COMMANDS[name]
@@ -244,3 +260,73 @@ class XBee:
 
     def set_application(self, app):
         self._app = app
+
+    def handle_command_mode_rsp(self, data):
+        """Handle AT command response in command mode."""
+        fut = self._cmd_mode_future
+        if fut is None or fut.done():
+            return
+        if data == 'OK':
+            fut.set_result(True)
+        elif data == 'ERROR':
+            fut.set_result(False)
+        else:
+            fut.set_result(data)
+
+    async def command_mode_at_cmd(self, command):
+        """Sends AT command in command mode."""
+        self._cmd_mode_future = asyncio.Future()
+        self._uart.command_mode_send(command.encode('ascii'))
+
+        try:
+            res = await asyncio.wait_for(self._cmd_mode_future, timeout=2)
+            return res
+        except asyncio.TimeoutError:
+            LOGGER.debug("Command mode no response to AT '%s' command", command)
+            return None
+
+    async def enter_at_command_mode(self):
+        """Enter command mode."""
+        await asyncio.sleep(1.2)  # keep UART quiet for 1s before escaping
+        return await self.command_mode_at_cmd('+++')
+
+    async def api_mode_at_commands(self, baudrate):
+        """Configure API and exit AT command mode."""
+        cmds = ['ATAP2', 'ATWR', 'ATCN']
+
+        bd = BAUDRATE_TO_BD.get(baudrate)
+        if bd:
+            cmds.insert(0, bd)
+
+        for cmd in cmds:
+            if await self.command_mode_at_cmd(cmd + '\r'):
+                    LOGGER.debug("Successfuly sent %s cmd", cmd)
+            else:
+                    LOGGER.debug("No response to %s cmd", cmd)
+                    return None
+        return True
+
+    async def init_api_mode(self):
+        """Configure API mode on XBee."""
+        current_baudrate = self._uart.baudrate
+        if await self.enter_at_command_mode():
+            LOGGER.debug(
+                "Entered AT Command mode at %dbps.", self._uart.baudrate)
+            return await self.api_mode_at_commands(current_baudrate)
+
+        for baudrate in sorted(BAUDRATE_TO_BD.keys()):
+            LOGGER.debug(
+                "Failed to enter AT command mode at %dbps, trying %d next",
+                self._uart.baudrate, baudrate
+            )
+            self._uart.baudrate = baudrate
+            if await self.enter_at_command_mode():
+                LOGGER.debug(
+                    "Entered AT Command mode at %dbps.", self._uart.baudrate)
+                res = await self.api_mode_at_commands(current_baudrate)
+                self._uart.baudrate = current_baudrate
+                return res
+
+        LOGGER.debug(("Couldn't enter AT command mode at any known baudrate."
+                      "Configure XBee manually for escaped API mode ATAP2"))
+        return False
