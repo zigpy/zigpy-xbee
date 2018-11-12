@@ -123,3 +123,31 @@ def test_send(gw):
     assert gw._transport.write.call_count == 1
     data = b'\x7E\x00\x02\x23\x7D\x31\xCB'
     assert gw._transport.write.called_once_with(data)
+
+
+def test_escape(gw):
+    data = b''.join([a.to_bytes(1, 'big') + b.to_bytes(1, 'big')
+                     for a, b in zip(gw.RESERVED, b'\x22\x33\x44\x55')])
+    escaped = gw._escape(data)
+    assert len(data) < len(escaped)
+    chk = [c for c in escaped if c in gw.RESERVED]
+    assert len(chk) == len(gw.RESERVED)  # 4 chars to escape, thus 4 escape chars
+    assert escaped == b'}^"}]3}1D}3U'
+
+
+def test_unescape(gw):
+    extra = b'\xaa\xbb\xcc\xff'
+    escaped = b'}^"}]3}1D}3U'
+    chk = b''.join([a.to_bytes(1, 'big') + b.to_bytes(1, 'big')
+                    for a, b in zip(gw.RESERVED, b'\x22\x33\x44\x55')])
+    unescaped, rest = gw._get_unescaped(escaped + extra, 8)
+    assert len(escaped) > len(unescaped)
+    assert rest == extra
+    assert unescaped == chk
+
+
+def test_unescape_underflow(gw):
+    escaped = b'}^"}'
+    unescaped, rest = gw._get_unescaped(escaped, 3)
+    assert unescaped is None
+    assert rest is None
