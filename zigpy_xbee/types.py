@@ -163,3 +163,75 @@ class NWK(uint16_t):
 
 UNKNOWN_IEEE = EUI64([uint8_t(0xff) for i in range(0, 8)])
 UNKNOWN_NWK = NWK(0xfffe)
+
+
+class TXStatus(uint8_t, UndefinedEnum):
+    """TX Status frame."""
+
+    SUCCESS = 0x00  # Standard
+
+    # all retries are expired and no ACK is received.
+    # Not returned for Broadcasts
+    NO_ACK_RECEIVED = 0x01
+    CCA_FAILURE = 0x02
+
+    # Transmission was purged because a coordinator tried to send to an end
+    # device, but it timed out waiting for a poll from the end device that
+    # never occurred, this haapens when Coordinator times out of an indirect
+    # transmission. Timeouse is defines ad 2.5 * 'SP' (Cyclic Sleep Period)
+    # parameter value
+    INDIRECT_TX_TIMEOUT = 0x03
+
+    # invalid destination endpoint
+    INVALID_DESTINATION_ENDPOINT = 0x15
+
+    # not returned for Broadcasts
+    NETWORK_ACK_FAILURE = 0x21
+
+    # TX failed because end device was not joined to the network
+    INDIRECT_TX_FAILURE = 0x22
+
+    # Self addressed
+    SELF_ADDRESSED = 0x23
+
+    # Address not found
+    ADDRESS_NOT_FOUND = 0x24
+
+    # Route not found
+    ROUTE_NOT_FOUND = 0x25
+
+    # Broadcast source failed to hear a neighbor relay the message
+    BROADCAST_RELAY_FAILURE = 0x26
+
+    # Invalid binding table index
+    INVALID_BINDING_IDX = 0x2B
+
+    # Resource error lack of free buffers, timers, and so forth.
+    NO_RESOURCES = 0x2C
+
+    # Attempted broadcast with APS transmission
+    BROADCAST_APS_TX_ATTEMPT = 0x2D
+
+    # Attempted unicast with APS transmission, but EE=0
+    UNICAST_APS_TX_ATTEMPT = 0x2E
+
+    INTERNAL_ERROR = 0x31
+
+    # Transmission failed due to resource depletion (for example, out of
+    # buffers, especially for indirect messages from coordinator)
+    NO_RESOURCES_2 = 0x32
+
+    # The payload in the frame was larger than allowed
+    PAYLOAD_TOO_LARGE = 0x74
+    _UNDEFINED = 0x2c
+
+
+class DiscoveryStatus(uint8_t, UndefinedEnum):
+    """Discovery status of TX Status frame."""
+
+    SUCCESS = 0x00
+    ADDRESS_DISCOVERY = 0x01
+    ROUTE_DISCOVERY = 0x02
+    ADDRESS_AND_ROUTE = 0x03
+    EXTENDED_TIMEOUT = 0x40
+    _UNDEFINED = 0x00
