@@ -1,20 +1,153 @@
 from unittest import mock
 
-from zigpy_xbee.uart import Gateway
+import pytest
+import serial_asyncio
+
+from zigpy_xbee import uart
 
 
-def test_extract():
-    gateway = Gateway(mock.MagicMock())
-    gateway._buffer = b'\x7E\x00\x02\x23\x7D\x31\xCBextra'
-    frame = gateway._extract_frame()
+@pytest.mark.asyncio
+async def test_connect_uart(monkeypatch):
+    api = mock.MagicMock()
+    portmock = mock.MagicMock()
+
+    async def mock_conn(loop, protocol_factory, **kwargs):
+        protocol = protocol_factory()
+        loop.call_soon(protocol.connection_made, None)
+        return None, protocol
+    monkeypatch.setattr(serial_asyncio, 'create_serial_connection', mock_conn)
+
+    await uart.connect(portmock, 57600, api)
+
+
+@pytest.fixture
+def gw():
+    gw = uart.Gateway(mock.MagicMock())
+    gw._transport = mock.MagicMock()
+    gw._transport.serial.BAUDRATES = serial_asyncio.serial.Serial.BAUDRATES
+    return gw
+
+
+@pytest.mark.asyncio
+async def test_connect(monkeypatch):
+    api = mock.MagicMock()
+    portmock = mock.MagicMock()
+
+    async def mock_conn(loop, protocol_factory, **kwargs):
+        protocol = protocol_factory()
+        loop.call_soon(protocol.connection_made, None)
+        return None, protocol
+    monkeypatch.setattr(serial_asyncio, 'create_serial_connection', mock_conn)
+
+    await uart.connect(portmock, 57600, api)
+
+
+def test_close(gw):
+    gw.close()
+    assert gw._transport.close.call_count == 1
+
+
+def test_data_received_chunk_frame(gw):
+    data = b'~\x00\x07\x8b\x0e\xff\xfd\x00$\x02D'
+    gw.frame_received = mock.MagicMock()
+    gw.data_received(data[:-4])
+    assert gw.frame_received.call_count == 0
+    gw.data_received(data[-4:])
+    assert gw.frame_received.call_count == 1
+    assert gw.frame_received.call_args[0][0] == data[3:-1]
+
+
+def test_data_received_full_frame(gw):
+    data = b'~\x00\x07\x8b\x0e\xff\xfd\x00$\x02D'
+    gw.frame_received = mock.MagicMock()
+    gw.data_received(data)
+    assert gw.frame_received.call_count == 1
+    assert gw.frame_received.call_args[0][0] == data[3:-1]
+
+
+def test_data_received_incomplete_frame(gw):
+    data = b'~\x00\x07\x8b\x0e\xff\xfd'
+    gw.frame_received = mock.MagicMock()
+    gw.data_received(data)
+    assert gw.frame_received.call_count == 0
+
+
+def test_extract(gw):
+    gw._buffer = b'\x7E\x00\x02\x23\x7D\x31\xCBextra'
+    frame = gw._extract_frame()
     assert frame == b'\x23\x11'
-    assert gateway._buffer == b'extra'
+    assert gw._buffer == b'extra'
 
 
-def test_send():
-    gateway = Gateway(mock.MagicMock())
-    gateway._transport = mock.MagicMock()
-    gateway.send(b'\x23\x11')
-    assert gateway._transport.write.call_count == 1
+def test_extract_wrong_checksum(gw):
+    gw._buffer = b'\x7E\x00\x02\x23\x7D\x31\xCEextra'
+    frame = gw._extract_frame()
+    assert frame is None
+    assert gw._buffer == b'extra'
+
+
+def test_extract_checksum_none(gw):
+    data = b'\x7E\x00\x02\x23\x7D\x31'
+    gw._buffer = data
+    gw._checksum = lambda x: None
+    frame = gw._extract_frame()
+    assert frame is None
+    assert gw._buffer == data
+
+
+def test_extract_frame_len_none(gw):
+    data = b'\x7E'
+    gw._buffer = data
+    frame = gw._extract_frame()
+    assert frame is None
+    assert gw._buffer == data
+
+
+def test_extract_frame_no_start(gw):
+    data = b'\x00\x02\x23\x7D\x31'
+    gw._buffer = data
+    frame = gw._extract_frame()
+    assert frame is None
+    assert gw._buffer == data
+
+
+def test_frame_received(gw):
+    data = b'frame'
+    gw.frame_received(data)
+    assert gw._api.frame_received.call_count == 1
+    assert gw._api.frame_received.call_args[0][0] == data
+
+
+def test_send(gw):
+    gw.send(b'\x23\x11')
+    assert gw._transport.write.call_count == 1
     data = b'\x7E\x00\x02\x23\x7D\x31\xCB'
-    assert gateway._transport.write.called_once_with(data)
+    assert gw._transport.write.called_once_with(data)
+
+
+def test_escape(gw):
+    data = b''.join([a.to_bytes(1, 'big') + b.to_bytes(1, 'big')
+                     for a, b in zip(gw.RESERVED, b'\x22\x33\x44\x55')])
+    escaped = gw._escape(data)
+    assert len(data) < len(escaped)
+    chk = [c for c in escaped if c in gw.RESERVED]
+    assert len(chk) == len(gw.RESERVED)  # 4 chars to escape, thus 4 escape chars
+    assert escaped == b'}^"}]3}1D}3U'
+
+
+def test_unescape(gw):
+    extra = b'\xaa\xbb\xcc\xff'
+    escaped = b'}^"}]3}1D}3U'
+    chk = b''.join([a.to_bytes(1, 'big') + b.to_bytes(1, 'big')
+                    for a, b in zip(gw.RESERVED, b'\x22\x33\x44\x55')])
+    unescaped, rest = gw._get_unescaped(escaped + extra, 8)
+    assert len(escaped) > len(unescaped)
+    assert rest == extra
+    assert unescaped == chk
+
+
+def test_unescape_underflow(gw):
+    escaped = b'}^"}'
+    unescaped, rest = gw._get_unescaped(escaped, 3)
+    assert unescaped is None
+    assert rest is None
