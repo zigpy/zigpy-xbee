@@ -10,7 +10,7 @@ LOGGER = logging.getLogger(__name__)
 # https://www.digi.com/resources/documentation/digidocs/PDFs/90000976.pdf
 COMMANDS = {
     'at': (0x08, (t.uint8_t, t.ATCommand, t.Bytes), 0x88),
-    'queued_at': (0x09, (), None),
+    'queued_at': (0x09, (t.uint8_t, t.ATCommand, t.Bytes), 0x88),
     'remote_at': (0x17, (), None),
     'tx': (0x10, (), None),
     'tx_explicit': (0x11, (t.uint8_t, t.EUI64, t.uint16_t, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), None),
@@ -185,6 +185,16 @@ class XBee:
     def _seq_command(self, name, *args):
         LOGGER.debug("Sequenced command: %s %s", name, args)
         return self._command(name, self._seq, *args)
+
+    def _queued_at(self, name, *args):
+        LOGGER.debug("Queue AT command: %s %s", name, args)
+        data = t.serialize(args, (AT_COMMANDS[name], ))
+        return self._command(
+            'queued_at',
+            self._seq,
+            name.encode('ascii'),
+            data,
+        )
 
     def _at_command(self, name, *args):
         LOGGER.debug("AT command: %s %s", name, args)
