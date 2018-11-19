@@ -79,8 +79,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
         LOGGER.debug("Zigbee request seq %s", sequence)
         assert sequence not in self._pending
-        reply_fut = asyncio.Future()
-        self._pending[sequence] = reply_fut
+        if expect_reply:
+            reply_fut = asyncio.Future()
+            self._pending[sequence] = reply_fut
         self._api._seq_command(
             'tx_explicit',
             self._devices_by_nwk[nwk],
@@ -93,8 +94,14 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             0x20,
             data,
         )
-        v = await asyncio.wait_for(reply_fut, timeout)
-        return v
+        if not expect_reply:
+            return
+
+        try:
+            return await asyncio.wait_for(reply_fut, timeout)
+        except asyncio.TimeoutError:
+            self._pending.pop(sequence, None)
+            raise
 
     async def permit(self, time_s=60):
         assert 0 <= time_s <= 254
