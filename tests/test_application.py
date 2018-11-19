@@ -112,8 +112,11 @@ async def test_form_network(app):
 
     app._api._at_command = mock.MagicMock(spec=XBee._at_command,
                                           side_effect=mock_at_command)
+    app._api._queued_at = mock.MagicMock(spec=XBee._at_command,
+                                         side_effect=mock_at_command)
     await app.form_network()
-    assert app._api._at_command.call_count > 8
+    assert app._api._at_command.call_count >= 1
+    assert app._api._queued_at.call_count >= 10
     assert app._nwk == mock.sentinel.ncp_nwk
 
 
