@@ -1,3 +1,4 @@
+import asyncio
 from unittest import mock
 
 import pytest
@@ -82,3 +83,34 @@ def test_rx_failed_deserialize(app, caplog):
 
     assert app._handle_reply.call_count == 0
     assert app.handle_message.call_count == 0
+
+
+async def _test_request(app, do_reply=True, expect_reply=True, **kwargs):
+    seq = 123
+    nwk = 0x2345
+    app._devices_by_nwk[nwk] = 0x22334455
+
+    def _mock_seq_command(cmdname, ieee, nwk, src_ep, dst_ep, cluster,
+                          profile, radius, options, data):
+        if expect_reply:
+            if do_reply:
+                app._pending[seq].set_result(mock.sentinel.reply_result)
+
+    app._api._seq_command = mock.MagicMock(side_effect=_mock_seq_command)
+    return await app.request(nwk, 0x0260, 1, 2, 3, seq, [4, 5, 6], expect_reply=expect_reply, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_request_with_reply(app):
+    assert await _test_request(app, True, True) == mock.sentinel.reply_result
+
+
+@pytest.mark.asyncio
+async def test_request_expect_no_reply(app):
+    assert await _test_request(app, False, False, tries=2, timeout=0.1) is None
+
+
+@pytest.mark.asyncio
+async def test_request_no_reply(app):
+    with pytest.raises(asyncio.TimeoutError):
+        await _test_request(app, False, True, tries=2, timeout=0.1)
