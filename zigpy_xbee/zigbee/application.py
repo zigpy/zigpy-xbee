@@ -17,7 +17,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         api.set_application(self)
 
         self._pending = {}
-        self._devices_by_nwk = {}
+        self._devices_by_nwk = {d.nwk: d.ieee for a, d in self.devices.items()}
 
         self._nwk = 0
 
@@ -43,29 +43,45 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         if auto_form and not (association_state == 0 and self._nwk == 0):
             await self.form_network()
 
+        ce = await self._api._at_command('CE')
+        LOGGER.debug("Coordinator %s", 'enabled' if ce else 'disabled')
+        nj = await self._api._at_command('NJ')
+        LOGGER.debug("Join permited time %is", nj)
+        id = await self._api._at_command('ID')
+        LOGGER.debug("Extended PAN ID: 0x%016x", id)
+        id = await self._api._at_command('OP')
+        LOGGER.debug("Operating Extended PAN ID: 0x%016x", id)
+        id = await self._api._at_command('OI')
+        LOGGER.debug("PAN ID: 0x%04x", id)
+
+    async def force_remove(self, dev):
+        """Forcibly remove device from NCP."""
+        pass
+
     async def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
         LOGGER.info("Forming network on channel %s", channel)
-        await self._api._at_command('AI')
-
         scan_bitmask = 1 << (channel - 11)
-        await self._api._at_command('ZS', 2)
-        await self._api._at_command('SC', scan_bitmask)
-        await self._api._at_command('EE', 1)
-        await self._api._at_command('EO', 2)
-        await self._api._at_command('NK', 0)
-        await self._api._at_command('KY', b'ZigBeeAlliance09')
-        await self._api._at_command('WR')
-        await self._api._at_command('AC')
-        await self._api._at_command('CE', 1)
+        await self._api._queued_at('ZS', 2)
+        await self._api._queued_at('SC', scan_bitmask)
+        await self._api._queued_at('EE', 1)
+        await self._api._queued_at('EO', 2)
+        await self._api._queued_at('NK', 0)
+        await self._api._queued_at('KY', b'ZigBeeAlliance09')
+        await self._api._queued_at('CE', 1)
+        await self._api._queued_at('NJ', 0)
+        await self._api._queued_at('AC')
+        await self._api._queued_at('WR')
 
+        await asyncio.sleep(0.2)
         self._nwk = await self._api._at_command('MY')
 
     @zigpy.util.retryable_request
     async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
         LOGGER.debug("Zigbee request seq %s", sequence)
         assert sequence not in self._pending
-        reply_fut = asyncio.Future()
-        self._pending[sequence] = reply_fut
+        if expect_reply:
+            reply_fut = asyncio.Future()
+            self._pending[sequence] = reply_fut
         self._api._seq_command(
             'tx_explicit',
             self._devices_by_nwk[nwk],
@@ -78,8 +94,14 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             0x20,
             data,
         )
-        v = await asyncio.wait_for(reply_fut, timeout)
-        return v
+        if not expect_reply:
+            return
+
+        try:
+            return await asyncio.wait_for(reply_fut, timeout)
+        except asyncio.TimeoutError:
+            self._pending.pop(sequence, None)
+            raise
 
     async def permit(self, time_s=60):
         assert 0 <= time_s <= 254

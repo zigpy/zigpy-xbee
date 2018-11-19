@@ -188,12 +188,17 @@ async def _test_request(app, do_reply=True, expect_reply=True, **kwargs):
                 app._pending[seq].set_result(mock.sentinel.reply_result)
 
     app._api._seq_command = mock.MagicMock(side_effect=_mock_seq_command)
-    return await app.request(nwk, 0x0260, 1, 2, 3, seq, [4, 5, 6], **kwargs)
+    return await app.request(nwk, 0x0260, 1, 2, 3, seq, [4, 5, 6], expect_reply=expect_reply, **kwargs)
 
 
 @pytest.mark.asyncio
 async def test_request_with_reply(app):
     assert await _test_request(app, True, True) == mock.sentinel.reply_result
+
+
+@pytest.mark.asyncio
+async def test_request_expect_no_reply(app):
+    assert await _test_request(app, False, False, tries=2, timeout=0.1) is None
 
 
 @pytest.mark.asyncio
