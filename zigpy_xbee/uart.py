@@ -26,12 +26,41 @@ class Gateway(asyncio.Protocol):
         frame = self.START + self._escape(len(data).to_bytes(2, 'big') + data + checksum)
         self._transport.write(frame)
 
+    @property
+    def baudrate(self):
+        """Baudrate."""
+        return self._transport.serial.baudrate
+
+    @baudrate.setter
+    def baudrate(self, baudrate):
+        """Set baudrate."""
+        if baudrate in self._transport.serial.BAUDRATES:
+            self._transport.serial.baudrate = baudrate
+        else:
+            raise ValueError("baudrate must be one of {}".format(
+                self._transport.serial.BAUDRATES)
+            )
+
     def connection_made(self, transport):
         """Callback when the uart is connected"""
         LOGGER.debug("Connection made")
         self._transport = transport
         if self._connected_future:
             self._connected_future.set_result(True)
+
+    def command_mode_rsp(self, data):
+        """Handles AT command mode response."""
+        try:
+            data = data.decode('ascii')
+        except Exception:
+            pass
+        LOGGER.debug("Handling AT command mode response: %s", data)
+        self._api.handle_command_mode_rsp(data)
+
+    def command_mode_send(self, data):
+        """Send data in command mode."""
+        LOGGER.debug("Command mode sending %s to uart", data)
+        self._transport.write(data)
 
     def data_received(self, data):
         """Callback when there is data received from the uart"""
@@ -41,6 +70,9 @@ class Gateway(asyncio.Protocol):
             if frame is None:
                 break
             self.frame_received(frame)
+        if self._buffer[-1:] == b'\r':
+            rsp, self._buffer = (self._buffer[:-1], b'')
+            self.command_mode_rsp(rsp)
 
     def frame_received(self, frame):
         """Frame receive handler"""
