@@ -107,7 +107,7 @@ def test_rx_failed_deserialize(app, caplog):
 async def test_form_network(app):
     async def mock_at_command(cmd, *args):
         if cmd == 'MY':
-            return mock.sentinel.ncp_nwk
+            return 0x0000
         return None
 
     app._api._at_command = mock.MagicMock(spec=XBee._at_command,
@@ -117,24 +117,41 @@ async def test_form_network(app):
     await app.form_network()
     assert app._api._at_command.call_count >= 1
     assert app._api._queued_at.call_count >= 10
-    assert app._nwk == mock.sentinel.ncp_nwk
+    assert app._nwk == 0x0000
 
 
-async def _test_startup(app, ai_status=0xff, auto_form=False):
+async def _test_startup(app, ai_status=0xff, auto_form=False, api_mode=True,
+                        api_config_succeeds=True):
     ai_tries = 5
+    app._nwk = mock.sentinel.nwk
 
     async def _at_command_mock(cmd, *args):
         nonlocal ai_tries
-        ai_tries -= 1
+        if not api_mode:
+            raise asyncio.TimeoutError
+
+        ai_tries -= 1 if cmd == 'AI' else 0
         return {
+            'AI': ai_status if ai_tries < 0 else 0xff,
+            'CE': 1 if ai_status == 0 else 0,
+            'ID': mock.sentinel.at_id,
+            'MY': 0xfffe if ai_status else 0x0000,
+            'NJ': mock.sentinel.at_nj,
+            'OI': mock.sentinel.at_oi,
+            'OP': mock.sentinel.at_op,
             'SH': 0x01020304,
             'SL': 0x05060708,
-            'MY': 0xfffe if ai_status else 0x0000,
-            'AI': ai_status if ai_tries < 0 else 0xff
         }.get(cmd, None)
 
     app._api._at_command = mock.MagicMock(spec=XBee._at_command,
                                           side_effect=_at_command_mock)
+
+    async def init_api_mode_mock():
+        nonlocal api_mode
+        api_mode = api_config_succeeds
+        return api_config_succeeds
+
+    app._api.init_api_mode = mock.MagicMock(side_effect=init_api_mode_mock)
     app.form_network = mock.MagicMock(
         side_effect=asyncio.coroutine(mock.MagicMock()))
 
@@ -167,6 +184,29 @@ async def test_startup_ai(app):
     assert app._nwk == 0xfffe
     assert app._ieee == EUI64(range(1, 9))
     assert app.form_network.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_startup_no_api_mode(app):
+    auto_form = True
+    await _test_startup(app, 0x00, auto_form, api_mode=False)
+    assert app._nwk == 0x0000
+    assert app._ieee == EUI64(range(1, 9))
+    assert app.form_network.call_count == 0
+    assert app._api.init_api_mode.call_count == 1
+    assert app._api._at_command.call_count >= 16
+
+
+@pytest.mark.asyncio
+async def test_startup_api_mode_config_fails(app):
+    auto_form = True
+    await _test_startup(app, 0x00, auto_form,
+                        api_mode=False, api_config_succeeds=False)
+    assert app._nwk == mock.sentinel.nwk
+    assert app._ieee is None
+    assert app.form_network.call_count == 0
+    assert app._api.init_api_mode.call_count == 1
+    assert app._api._at_command.call_count == 1
 
 
 @pytest.mark.asyncio

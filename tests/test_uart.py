@@ -6,26 +6,23 @@ import serial_asyncio
 from zigpy_xbee import uart
 
 
-@pytest.mark.asyncio
-async def test_connect_uart(monkeypatch):
-    api = mock.MagicMock()
-    portmock = mock.MagicMock()
-
-    async def mock_conn(loop, protocol_factory, **kwargs):
-        protocol = protocol_factory()
-        loop.call_soon(protocol.connection_made, None)
-        return None, protocol
-    monkeypatch.setattr(serial_asyncio, 'create_serial_connection', mock_conn)
-
-    await uart.connect(portmock, 57600, api)
-
-
 @pytest.fixture
 def gw():
     gw = uart.Gateway(mock.MagicMock())
     gw._transport = mock.MagicMock()
     gw._transport.serial.BAUDRATES = serial_asyncio.serial.Serial.BAUDRATES
     return gw
+
+
+def test_baudrate(gw):
+    gw.baudrate
+    gw.baudrate = 19200
+    assert gw._transport.serial.baudrate == 19200
+
+
+def test_baudrate_fail(gw):
+    with pytest.raises(ValueError):
+        gw.baudrate = 3333
 
 
 @pytest.mark.asyncio
@@ -40,6 +37,20 @@ async def test_connect(monkeypatch):
     monkeypatch.setattr(serial_asyncio, 'create_serial_connection', mock_conn)
 
     await uart.connect(portmock, 57600, api)
+
+
+def test_command_mode_rsp(gw):
+    data = b'OK'
+    gw.command_mode_rsp(data)
+    assert gw._api.handle_command_mode_rsp.call_count == 1
+    assert gw._api.handle_command_mode_rsp.call_args[0][0] == 'OK'
+
+
+def test_command_mode_send(gw):
+    data = b'ATAP2\x0D'
+    gw.command_mode_send(data)
+    assert gw._transport.write.call_count == 1
+    assert gw._transport.write.called_once_with(data)
 
 
 def test_close(gw):
@@ -70,6 +81,16 @@ def test_data_received_incomplete_frame(gw):
     gw.frame_received = mock.MagicMock()
     gw.data_received(data)
     assert gw.frame_received.call_count == 0
+
+
+def test_data_received_at_response(gw):
+    data = b'OK\x0D'
+    gw.frame_received = mock.MagicMock()
+    gw.command_mode_rsp = mock.MagicMock()
+
+    gw.data_received(data)
+    assert gw.command_mode_rsp.call_count == 1
+    assert gw.command_mode_rsp.call_args[0][0] == b'OK'
 
 
 def test_extract(gw):
