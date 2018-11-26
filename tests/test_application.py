@@ -296,3 +296,8 @@ def test_handle_reply_unexpected(app):
     assert app.handle_message.call_args[0][6] == tsn
     assert app.handle_message.call_args[0][7] == mock.sentinel.command_id
     assert app.handle_message.call_args[0][8] == mock.sentinel.args
+
+
+@pytest.mark.asyncio
+async def test_force_remove(app):
+    await app.force_remove(mock.sentinel.device)
