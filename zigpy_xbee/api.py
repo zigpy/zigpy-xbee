@@ -1,6 +1,8 @@
 import asyncio
 import logging
 
+from zigpy.types import LVList
+
 from . import uart
 from . import types as t
 
@@ -28,7 +30,7 @@ COMMANDS = {
     'rx_io_data_long_addr': (0x92, (), None),
     'remote_at_response': (0x97, (), None),
     'extended_status': (0x98, (), None),
-    'route_record_indicator': (0xA1, (), None),
+    'route_record_indicator': (0xA1, (t.EUI64, t.uint16_t, t.uint8_t, LVList(t.uint16_t)), None),
     'many_to_one_rri': (0xA3, (), None),
     'node_id_indicator': (0x95, (), None),
 
@@ -254,6 +256,10 @@ class XBee:
     def _handle_explicit_rx_indicator(self, data):
         LOGGER.debug("_handle_explicit_rx: opts=%s", data[6])
         self._app.handle_rx(*data)
+
+    def _handle_route_record_indicator(self, data):
+        """Handle Route Record indicator from a device."""
+        LOGGER.debug("_handle_route_record_indicator: %s", data)
 
     def _handle_tx_status(self, data):
         LOGGER.debug("tx_status: %s", data)
