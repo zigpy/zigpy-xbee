@@ -1,4 +1,5 @@
 import asyncio
+import enum
 import logging
 
 from zigpy.types import LVList
@@ -148,6 +149,7 @@ AT_COMMANDS = {
     'CE': t.uint8_t,
 }
 
+
 BAUDRATE_TO_BD = {
     1200: 'ATBD0',
     2400: 'ATBD1',
@@ -159,6 +161,13 @@ BAUDRATE_TO_BD = {
     115200: 'ATBD7',
     230400: 'ATBD8',
 }
+
+
+class ATCommandResult(enum.IntEnum):
+    OK = 0
+    ERROR = 1
+    INVALID_COMMAND = 2
+    INVALID_PARAMETER = 3
 
 
 class XBee:
@@ -236,8 +245,14 @@ class XBee:
 
     def _handle_at_response(self, data):
         fut, = self._awaiting.pop(data[0])
-        if data[2]:
-            fut.set_exception(Exception(data[2]))
+        try:
+            status = ATCommandResult(data[2])
+        except ValueError:
+            status = ATCommandResult.ERROR
+
+        if status:
+            fut.set_exception(
+                RuntimeError("AT Command response: {}".format(status.name)))
             return
 
         response_type = AT_COMMANDS[data[1].decode('ascii')]

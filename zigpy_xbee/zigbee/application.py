@@ -40,27 +40,29 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._ieee = zigpy.types.EUI64([zigpy.types.uint8_t(b) for b in as_bytes])
         LOGGER.debug("Read local IEEE address as %s", self._ieee)
 
-        association_state = await self._api._at_command('AI')
-        while association_state == 0xFF:
-            LOGGER.debug("Waiting for radio startup...")
-            await asyncio.sleep(0.2)
-            association_state = await self._api._at_command('AI')
-
+        association_state = await self._get_association_state()
         self._nwk = await self._api._at_command('MY')
+        enc_enabled = await self._api._at_command('EE')
+        enc_options = await self._api._at_command('EO')
+        zb_profile = await self._api._at_command('ZS')
 
-        if auto_form and not (association_state == 0 and self._nwk == 0):
+        should_form = (enc_enabled != 1, enc_options != 2, zb_profile != 2,
+                       association_state != 0, self._nwk != 0)
+        if auto_form and any(should_form):
             await self.form_network()
 
-        ce = await self._api._at_command('CE')
-        LOGGER.debug("Coordinator %s", 'enabled' if ce else 'disabled')
-        nj = await self._api._at_command('NJ')
-        LOGGER.debug("Join permited time %is", nj)
+        await self._api._at_command('NJ', 0)
         id = await self._api._at_command('ID')
         LOGGER.debug("Extended PAN ID: 0x%016x", id)
         id = await self._api._at_command('OP')
         LOGGER.debug("Operating Extended PAN ID: 0x%016x", id)
         id = await self._api._at_command('OI')
         LOGGER.debug("PAN ID: 0x%04x", id)
+        try:
+            ce = await self._api._at_command('CE')
+            LOGGER.debug("Coordinator %s", 'enabled' if ce else 'disabled')
+        except RuntimeError as exc:
+            LOGGER.debug("sending CE command: %s", exc)
 
     async def force_remove(self, dev):
         """Forcibly remove device from NCP."""
@@ -75,14 +77,28 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._api._queued_at('EO', 2)
         await self._api._queued_at('NK', 0)
         await self._api._queued_at('KY', b'ZigBeeAlliance09')
-        await self._api._queued_at('CE', 1)
         await self._api._queued_at('NJ', 0)
-        await self._api._queued_at('AC')
-        await self._api._queued_at('WR')
+        try:
+            await self._api._queued_at('CE', 1)
+        except RuntimeError:
+            pass
+        await self._api._at_command('WR')
 
-        await asyncio.sleep(0.2)
+        await asyncio.wait_for(
+            self._api.coordinator_started_event.wait(), timeout=10)
+        association_state = await self._get_association_state()
+        LOGGER.debug("Association state: %s", association_state)
         self._nwk = await self._api._at_command('MY')
         assert self._nwk == 0x0000
+
+    async def _get_association_state(self):
+        """Wait for Zigbee to start."""
+        state = await self._api._at_command('AI')
+        while state == 0xFF:
+            LOGGER.debug("Waiting for radio startup...")
+            await asyncio.sleep(0.2)
+            state = await self._api._at_command('AI')
+        return state
 
     @zigpy.util.retryable_request
     async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
