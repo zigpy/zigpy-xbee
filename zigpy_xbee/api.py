@@ -12,6 +12,20 @@ LOGGER = logging.getLogger(__name__)
 AT_COMMAND_TIMEOUT = 2
 
 
+class ModemStatus(t.uint8_t, t.UndefinedEnum):
+    HARDWARE_RESET = 0x00
+    WATCHDOG_TIMER_RESET = 0x01
+    JOINED_NETWORK = 0x02
+    DISASSOCIATED = 0x03
+    COORDINATOR_STARTED = 0x06
+    NETWORK_SECURITY_KEY_UPDATED = 0x07
+    VOLTAGE_SUPPLY_LIMIT_EXCEEDED = 0x0d
+    MODEM_CONFIGURATION_CHANGED_WHILE_JOIN_IN_PROGRESS = 0x11
+
+    UNKNOWN_MODEM_STATUS = 0xff
+    _UNDEFINED = 0xff
+
+
 # https://www.digi.com/resources/documentation/digidocs/PDFs/90000976.pdf
 COMMANDS = {
     'at': (0x08, (t.uint8_t, t.ATCommand, t.Bytes), 0x88),
@@ -23,7 +37,7 @@ COMMANDS = {
     'register_joining_device': (0x24, (), None),
 
     'at_response': (0x88, (t.uint8_t, t.ATCommand, t.uint8_t, t.Bytes), None),
-    'modem_status': (0x8A, (t.uint8_t, ), None),
+    'modem_status': (0x8A, (ModemStatus, ), None),
     'tx_status': (0x8B, (t.uint8_t, t.uint16_t, t.uint8_t, t.uint8_t, t.uint8_t), None),
     'route_information': (0x8D, (), None),
     'rx': (0x90, (), None),
@@ -171,17 +185,6 @@ class ATCommandResult(enum.IntEnum):
 
 
 class XBee:
-    MODEM_STATUS = {
-        0x00: 'Hardware reset',
-        0x01: 'Watchdog timer reset',
-        0x02: 'Joined network (routers and end devices)',
-        0x03: 'Disassociated',
-        0x06: 'Coordinator started',
-        0x07: 'Network security key was updated',
-        0x0D: 'Voltage supply limit exceeded (PRO S2B only)',
-        0x11: 'Modem configuration changed while join in progress',
-    }
-
     def __init__(self):
         self._uart = None
         self._seq = 1
@@ -189,6 +192,23 @@ class XBee:
         self._awaiting = {}
         self._app = None
         self._cmd_mode_future = None
+        self._reset = asyncio.Event()
+        self._running = asyncio.Event()
+
+    @property
+    def reset_event(self):
+        """Return reset event."""
+        return self._reset
+
+    @property
+    def coordinator_started_event(self):
+        """Return coordinator started."""
+        return self._running
+
+    @property
+    def is_running(self):
+        """Return true if coordinator is running."""
+        return self.coordinator_started_event.is_set()
 
     async def connect(self, device, baudrate=115200):
         assert self._uart is None
@@ -264,9 +284,18 @@ class XBee:
         fut.set_result(response)
 
     def _handle_modem_status(self, data):
-        LOGGER.debug("data = %s", data)
+        LOGGER.debug("Handle modem status frame: %s", data)
+        status = data[0]
+        if status == ModemStatus.COORDINATOR_STARTED:
+            self.coordinator_started_event.set()
+        elif status in (ModemStatus.HARDWARE_RESET, ModemStatus.WATCHDOG_TIMER_RESET):
+            self.reset_event.set()
+            self.coordinator_started_event.clear()
+        elif status == ModemStatus.DISASSOCIATED:
+            self.coordinator_started_event.clear()
+
         if self._app:
-            self._app.handle_modem_status(data[0])
+            self._app.handle_modem_status(status)
 
     def _handle_explicit_rx_indicator(self, data):
         LOGGER.debug("_handle_explicit_rx: opts=%s", data[6])
