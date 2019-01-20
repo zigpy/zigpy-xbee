@@ -4,6 +4,7 @@ from unittest import mock
 import pytest
 
 from zigpy_xbee import api as xbee_api, types as t, uart
+from zigpy_xbee.zigbee.application import ControllerApplication
 
 
 @pytest.fixture
@@ -187,14 +188,39 @@ def test_handle_at_response_error(api):
     assert fut.exception() is not None
 
 
-def test_handle_modem_status(api):
-    s = mock.sentinel
-    data = [s.modem_status, s.extra_1, s.extra_2, s.extra_3]
-    api._app = mock.MagicMock()
-    api._app.handle_modem_status = mock.MagicMock()
-    api._handle_modem_status(data)
+def test_handle_at_response_undef_error(api):
+    tsn = 123
+    status, response = 0xEE, 0x23
+    fut = _handle_at_response(api, tsn, status, [response])
+    assert fut.done() is True
+    assert fut.exception() is not None
+
+
+def _send_modem_event(api, event):
+    api._app = mock.MagicMock(spec=ControllerApplication)
+    api._handle_modem_status([event])
     assert api._app.handle_modem_status.call_count == 1
-    assert api._app.handle_modem_status.call_args[0][0] == mock.sentinel.modem_status
+    assert api._app.handle_modem_status.call_args[0][0] == event
+
+
+def test_handle_modem_status(api):
+    api._running.clear()
+    api._reset.set()
+    _send_modem_event(api, xbee_api.ModemStatus.COORDINATOR_STARTED)
+    assert api.is_running is True
+    assert api.reset_event.is_set() is True
+
+    api._running.set()
+    api._reset.set()
+    _send_modem_event(api, xbee_api.ModemStatus.DISASSOCIATED)
+    assert api.is_running is False
+    assert api.reset_event.is_set() is True
+
+    api._running.set()
+    api._reset.clear()
+    _send_modem_event(api, xbee_api.ModemStatus.HARDWARE_RESET)
+    assert api.is_running is False
+    assert api.reset_event.is_set() is True
 
 
 def test_handle_explicit_rx_indicator(api):
@@ -316,3 +342,7 @@ async def test_init_api_mode(api, monkeypatch):
 def test_set_application(api):
     api.set_application(mock.sentinel.app)
     assert api._app == mock.sentinel.app
+
+
+def test_handle_route_record_indicator(api):
+    api._handle_route_record_indicator(mock.sentinel.ri)
