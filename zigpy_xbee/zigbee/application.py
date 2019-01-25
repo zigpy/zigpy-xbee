@@ -23,7 +23,15 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
     async def startup(self, auto_form=False):
         """Perform a complete application startup"""
-        await self._api._at_command('AP', 2)  # Ensure we have escaped commands
+        try:
+            # Ensure we have escaped commands
+            await self._api._at_command('AP', 2)
+        except asyncio.TimeoutError:
+            LOGGER.debug("No response to API frame. Configure API mode")
+            if not await self._api.init_api_mode():
+                LOGGER.error("Failed to configure XBee API mode.")
+                return False
+
         await self._api._at_command('AO', 0x03)
 
         serial_high = await self._api._at_command('SH')
@@ -74,13 +82,15 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         await asyncio.sleep(0.2)
         self._nwk = await self._api._at_command('MY')
+        assert self._nwk == 0x0000
 
     @zigpy.util.retryable_request
     async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
         LOGGER.debug("Zigbee request seq %s", sequence)
         assert sequence not in self._pending
-        reply_fut = asyncio.Future()
-        self._pending[sequence] = reply_fut
+        if expect_reply:
+            reply_fut = asyncio.Future()
+            self._pending[sequence] = reply_fut
         self._api._seq_command(
             'tx_explicit',
             self._devices_by_nwk[nwk],
@@ -93,8 +103,14 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             0x20,
             data,
         )
-        v = await asyncio.wait_for(reply_fut, timeout)
-        return v
+        if not expect_reply:
+            return
+
+        try:
+            return await asyncio.wait_for(reply_fut, timeout)
+        except asyncio.TimeoutError:
+            self._pending.pop(sequence, None)
+            raise
 
     async def permit_ncp(self, time_s=60):
         assert 0 <= time_s <= 254
