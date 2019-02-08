@@ -135,7 +135,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         if device.nwk != src_nwk:
             LOGGER.debug('nwk changed')
             self.handle_join(src_nwk, ember_ieee, 0)
-            self._devices_by_nwk.pop(src_nwk, None)
+            self._devices_by_nwk.pop(device.nwk, None)
         self._devices_by_nwk[src_nwk] = src_ieee
 
         try:
