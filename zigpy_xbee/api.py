@@ -300,10 +300,10 @@ class XBee:
 
         for cmd in cmds:
             if await self.command_mode_at_cmd(cmd + '\r'):
-                    LOGGER.debug("Successfuly sent %s cmd", cmd)
+                LOGGER.debug("Successfuly sent %s cmd", cmd)
             else:
-                    LOGGER.debug("No response to %s cmd", cmd)
-                    return None
+                LOGGER.debug("No response to %s cmd", cmd)
+                return None
         return True
 
     async def init_api_mode(self):
