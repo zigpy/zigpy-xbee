@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 
 from zigpy.types import EUI64
-from zigpy_xbee.api import XBee
+from zigpy_xbee.api import ModemStatus, XBee
 from zigpy_xbee.zigbee.application import ControllerApplication
 
 
@@ -14,11 +14,10 @@ def app(database_file=None):
 
 
 def test_modem_status(app):
-    assert 0x00 in app._api.MODEM_STATUS
-    app.handle_modem_status(0x00)
-    # assert that the test below actually checks a value that is not in MODEM_STATUS
-    assert 0xff not in app._api.MODEM_STATUS
-    app.handle_modem_status(0xff)
+    assert 0x00 in ModemStatus.__members__.values()
+    app.handle_modem_status(ModemStatus(0x00))
+    assert 0xEE not in ModemStatus.__members__.values()
+    app.handle_modem_status(ModemStatus(0xEE))
 
 
 def _test_rx(app, device, deserialized):
@@ -104,24 +103,56 @@ def test_rx_failed_deserialize(app, caplog):
 
 
 @pytest.mark.asyncio
+async def test_get_association_state(app):
+    ai_results = (0xff, 0xff, 0xff, 0xff, mock.sentinel.ai)
+    app._api._at_command = mock.MagicMock(
+        spec=XBee._at_command, side_effect=asyncio.coroutine(mock.MagicMock(
+            side_effect=ai_results
+        )))
+    ai = await app._get_association_state()
+    assert app._api._at_command.call_count == len(ai_results)
+    assert ai is mock.sentinel.ai
+
+
+@pytest.mark.asyncio
 async def test_form_network(app):
+    legacy_module = False
+
     async def mock_at_command(cmd, *args):
         if cmd == 'MY':
             return 0x0000
+        elif cmd == 'WR':
+            app._api.coordinator_started_event.set()
+        elif cmd == 'CE' and legacy_module:
+            raise RuntimeError
         return None
 
     app._api._at_command = mock.MagicMock(spec=XBee._at_command,
                                           side_effect=mock_at_command)
     app._api._queued_at = mock.MagicMock(spec=XBee._at_command,
                                          side_effect=mock_at_command)
+    app._get_association_state = mock.MagicMock(
+        spec=ControllerApplication._get_association_state,
+        side_effect=asyncio.coroutine(mock.MagicMock(return_value=0x00))
+    )
+
     await app.form_network()
     assert app._api._at_command.call_count >= 1
-    assert app._api._queued_at.call_count >= 10
+    assert app._api._queued_at.call_count >= 7
+    assert app._nwk == 0x0000
+
+    app._api._at_command.reset_mock()
+    app._api._queued_at.reset_mock()
+    legacy_module = True
+    await app.form_network()
+    assert app._api._at_command.call_count >= 1
+    assert app._api._queued_at.call_count >= 7
     assert app._nwk == 0x0000
 
 
 async def _test_startup(app, ai_status=0xff, auto_form=False, api_mode=True,
-                        api_config_succeeds=True):
+                        api_config_succeeds=True, ee=1, eo=2, zs=2,
+                        legacy_module=False):
     ai_tries = 5
     app._nwk = mock.sentinel.nwk
 
@@ -129,11 +160,15 @@ async def _test_startup(app, ai_status=0xff, auto_form=False, api_mode=True,
         nonlocal ai_tries
         if not api_mode:
             raise asyncio.TimeoutError
+        if cmd == 'CE' and legacy_module:
+            raise RuntimeError
 
         ai_tries -= 1 if cmd == 'AI' else 0
         return {
             'AI': ai_status if ai_tries < 0 else 0xff,
             'CE': 1 if ai_status == 0 else 0,
+            'EO': eo,
+            'EE': ee,
             'ID': mock.sentinel.at_id,
             'MY': 0xfffe if ai_status else 0x0000,
             'NJ': mock.sentinel.at_nj,
@@ -141,6 +176,7 @@ async def _test_startup(app, ai_status=0xff, auto_form=False, api_mode=True,
             'OP': mock.sentinel.at_op,
             'SH': 0x01020304,
             'SL': 0x05060708,
+            'ZS': zs,
         }.get(cmd, None)
 
     app._api._at_command = mock.MagicMock(spec=XBee._at_command,
@@ -184,6 +220,24 @@ async def test_startup_ai(app):
     assert app._nwk == 0xfffe
     assert app._ieee == EUI64(range(1, 9))
     assert app.form_network.call_count == 0
+
+    auto_form = True
+    await _test_startup(app, 0x00, auto_form, zs=1)
+    assert app._nwk == 0x0000
+    assert app._ieee == EUI64(range(1, 9))
+    assert app.form_network.call_count == 1
+
+    auto_form = False
+    await _test_startup(app, 0x06, auto_form, legacy_module=True)
+    assert app._nwk == 0xfffe
+    assert app._ieee == EUI64(range(1, 9))
+    assert app.form_network.call_count == 0
+
+    auto_form = True
+    await _test_startup(app, 0x00, auto_form, zs=1, legacy_module=True)
+    assert app._nwk == 0x0000
+    assert app._ieee == EUI64(range(1, 9))
+    assert app.form_network.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -296,3 +350,8 @@ def test_handle_reply_unexpected(app):
     assert app.handle_message.call_args[0][6] == tsn
     assert app.handle_message.call_args[0][7] == mock.sentinel.command_id
     assert app.handle_message.call_args[0][8] == mock.sentinel.args
+
+
+@pytest.mark.asyncio
+async def test_force_remove(app):
+    await app.force_remove(mock.sentinel.device)
