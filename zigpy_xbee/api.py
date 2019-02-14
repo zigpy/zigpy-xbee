@@ -1,5 +1,8 @@
 import asyncio
+import enum
 import logging
+
+from zigpy.types import LVList
 
 from . import uart
 from . import types as t
@@ -7,6 +10,20 @@ from . import types as t
 LOGGER = logging.getLogger(__name__)
 
 AT_COMMAND_TIMEOUT = 2
+
+
+class ModemStatus(t.uint8_t, t.UndefinedEnum):
+    HARDWARE_RESET = 0x00
+    WATCHDOG_TIMER_RESET = 0x01
+    JOINED_NETWORK = 0x02
+    DISASSOCIATED = 0x03
+    COORDINATOR_STARTED = 0x06
+    NETWORK_SECURITY_KEY_UPDATED = 0x07
+    VOLTAGE_SUPPLY_LIMIT_EXCEEDED = 0x0d
+    MODEM_CONFIGURATION_CHANGED_WHILE_JOIN_IN_PROGRESS = 0x11
+
+    UNKNOWN_MODEM_STATUS = 0xff
+    _UNDEFINED = 0xff
 
 
 # https://www.digi.com/resources/documentation/digidocs/PDFs/90000976.pdf
@@ -20,7 +37,7 @@ COMMANDS = {
     'register_joining_device': (0x24, (), None),
 
     'at_response': (0x88, (t.uint8_t, t.ATCommand, t.uint8_t, t.Bytes), None),
-    'modem_status': (0x8A, (t.uint8_t, ), None),
+    'modem_status': (0x8A, (ModemStatus, ), None),
     'tx_status': (0x8B, (t.uint8_t, t.uint16_t, t.uint8_t, t.uint8_t, t.uint8_t), None),
     'route_information': (0x8D, (), None),
     'rx': (0x90, (), None),
@@ -28,7 +45,7 @@ COMMANDS = {
     'rx_io_data_long_addr': (0x92, (), None),
     'remote_at_response': (0x97, (), None),
     'extended_status': (0x98, (), None),
-    'route_record_indicator': (0xA1, (), None),
+    'route_record_indicator': (0xA1, (t.EUI64, t.uint16_t, t.uint8_t, LVList(t.uint16_t)), None),
     'many_to_one_rri': (0xA3, (), None),
     'node_id_indicator': (0x95, (), None),
 
@@ -146,6 +163,7 @@ AT_COMMANDS = {
     'CE': t.uint8_t,
 }
 
+
 BAUDRATE_TO_BD = {
     1200: 'ATBD0',
     2400: 'ATBD1',
@@ -159,18 +177,14 @@ BAUDRATE_TO_BD = {
 }
 
 
-class XBee:
-    MODEM_STATUS = {
-        0x00: 'Hardware reset',
-        0x01: 'Watchdog timer reset',
-        0x02: 'Joined network (routers and end devices)',
-        0x03: 'Disassociated',
-        0x06: 'Coordinator started',
-        0x07: 'Network security key was updated',
-        0x0D: 'Voltage supply limit exceeded (PRO S2B only)',
-        0x11: 'Modem configuration changed while join in progress',
-    }
+class ATCommandResult(enum.IntEnum):
+    OK = 0
+    ERROR = 1
+    INVALID_COMMAND = 2
+    INVALID_PARAMETER = 3
 
+
+class XBee:
     def __init__(self):
         self._uart = None
         self._seq = 1
@@ -178,6 +192,23 @@ class XBee:
         self._awaiting = {}
         self._app = None
         self._cmd_mode_future = None
+        self._reset = asyncio.Event()
+        self._running = asyncio.Event()
+
+    @property
+    def reset_event(self):
+        """Return reset event."""
+        return self._reset
+
+    @property
+    def coordinator_started_event(self):
+        """Return coordinator started."""
+        return self._running
+
+    @property
+    def is_running(self):
+        """Return true if coordinator is running."""
+        return self.coordinator_started_event.is_set()
 
     async def connect(self, device, baudrate=115200):
         assert self._uart is None
@@ -234,8 +265,14 @@ class XBee:
 
     def _handle_at_response(self, data):
         fut, = self._awaiting.pop(data[0])
-        if data[2]:
-            fut.set_exception(Exception(data[2]))
+        try:
+            status = ATCommandResult(data[2])
+        except ValueError:
+            status = ATCommandResult.ERROR
+
+        if status:
+            fut.set_exception(
+                RuntimeError("AT Command response: {}".format(status.name)))
             return
 
         response_type = AT_COMMANDS[data[1].decode('ascii')]
@@ -247,13 +284,26 @@ class XBee:
         fut.set_result(response)
 
     def _handle_modem_status(self, data):
-        LOGGER.debug("data = %s", data)
+        LOGGER.debug("Handle modem status frame: %s", data)
+        status = data[0]
+        if status == ModemStatus.COORDINATOR_STARTED:
+            self.coordinator_started_event.set()
+        elif status in (ModemStatus.HARDWARE_RESET, ModemStatus.WATCHDOG_TIMER_RESET):
+            self.reset_event.set()
+            self.coordinator_started_event.clear()
+        elif status == ModemStatus.DISASSOCIATED:
+            self.coordinator_started_event.clear()
+
         if self._app:
-            self._app.handle_modem_status(data[0])
+            self._app.handle_modem_status(status)
 
     def _handle_explicit_rx_indicator(self, data):
         LOGGER.debug("_handle_explicit_rx: opts=%s", data[6])
         self._app.handle_rx(*data)
+
+    def _handle_route_record_indicator(self, data):
+        """Handle Route Record indicator from a device."""
+        LOGGER.debug("_handle_route_record_indicator: %s", data)
 
     def _handle_tx_status(self, data):
         LOGGER.debug("tx_status: %s", data)
