@@ -22,8 +22,6 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         api.set_application(self)
 
         self._pending = {}
-        self._devices_by_nwk = {d.nwk: d.ieee for a, d in self.devices.items()}
-
         self._nwk = 0
 
     async def startup(self, auto_form=False):
@@ -116,9 +114,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         if expect_reply:
             reply_fut = asyncio.Future()
             self._pending[sequence] = reply_fut
+
+        dev = self.get_device(nwk=nwk)
         self._api._seq_command(
             'tx_explicit',
-            self._devices_by_nwk[nwk],
+            dev.ieee,
             nwk,
             src_ep,
             dst_ep,
@@ -153,10 +153,37 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             return
 
         ember_ieee = zigpy.types.EUI64(src_ieee)
-        if ember_ieee not in self.devices:
-            self.handle_join(src_nwk, ember_ieee, 0)  # TODO: Parent nwk
-        self._devices_by_nwk[src_nwk] = src_ieee
-        device = self.get_device(ember_ieee)
+        if dst_ep == 0 and cluster_id == 0x13:
+            # ZDO Device announce request
+            nwk, data = zigpy.types.uint16_t.deserialize(data[1:])
+            ieee, data = zigpy.types.EUI64.deserialize(data)
+            LOGGER.info("New device joined: NWK 0x%04x, IEEE %s", nwk, ieee)
+            if ember_ieee != ieee:
+                LOGGER.warning(
+                    "Announced IEEE %s is different from originator %s",
+                    str(ieee), str(ember_ieee))
+            if src_nwk != nwk:
+                LOGGER.warning(
+                    "Announced 0x%04x NWK is different from originator 0x%04x",
+                    nwk, src_nwk
+                )
+            self.handle_join(nwk, ieee, 0)
+
+        try:
+            device = self.get_device(ieee=ember_ieee)
+        except KeyError:
+            LOGGER.debug("Received frame from unknown device: 0x%04x/%s",
+                         src_nwk, str(ember_ieee))
+            return
+
+        if device.status == zigpy.device.Status.NEW and dst_ep != 0:
+            # only allow ZDO responses while initializing device
+            LOGGER.debug("Received frame on uninitialized device %s (%s) for endpoint: %s", device.ieee, device.status, dst_ep)
+            return
+        elif device.status == zigpy.device.Status.ZDO_INIT and dst_ep != 0 and cluster_id != 0:
+            # only allow access to basic cluster while initializing endpoints
+            LOGGER.debug("Received frame on uninitialized device %s endpoint %s for cluster: %s", device.ieee, dst_ep, cluster_id)
+            return
 
         try:
             tsn, command_id, is_reply, args = self.deserialize(device, src_ep, cluster_id, data)

@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 
-from zigpy.types import EUI64
+from zigpy.types import EUI64, uint16_t
 from zigpy_xbee.api import ModemStatus, XBee
 from zigpy_xbee.zigbee.application import ControllerApplication
 
@@ -20,19 +20,22 @@ def test_modem_status(app):
     app.handle_modem_status(ModemStatus(0xEE))
 
 
-def _test_rx(app, device, deserialized):
+def _test_rx(app, device, nwk, deserialized,
+             dst_ep=mock.sentinel.dst_ep,
+             cluster_id=mock.sentinel.cluster_id,
+             data=b''):
     app.get_device = mock.MagicMock(return_value=device)
     app.deserialize = mock.MagicMock(return_value=deserialized)
 
     app.handle_rx(
         b'\x01\x02\x03\x04\x05\x06\x07\x08',
-        mock.sentinel.src_nwk,
+        nwk,
         mock.sentinel.src_ep,
-        mock.sentinel.dst_ep,
-        mock.sentinel.cluster_id,
+        dst_ep,
+        cluster_id,
         mock.sentinel.profile_id,
         mock.sentinel.rxopts,
-        b'',
+        data,
     )
 
     assert app.deserialize.call_count == 1
@@ -41,7 +44,7 @@ def _test_rx(app, device, deserialized):
 def test_rx(app):
     device = mock.MagicMock()
     app.handle_message = mock.MagicMock()
-    _test_rx(app, device, (1, 2, False, []))
+    _test_rx(app, device, mock.sentinel.src_nwk, (1, 2, False, []))
     assert app.handle_message.call_count == 1
     assert app.handle_message.call_args == ((
         device,
@@ -73,16 +76,43 @@ def test_rx_nwk_0000(app):
     assert app._handle_reply.call_count == 0
 
 
+def test_rx_unknown_device(app):
+    app._handle_reply = mock.MagicMock()
+    app.handle_message = mock.MagicMock()
+    app.handle_join = mock.MagicMock()
+    app.get_device = mock.MagicMock(side_effect=KeyError)
+    app.handle_rx(
+        b'\x01\x02\x03\x04\x05\x06\x07\x08',
+        0x1234,
+        mock.sentinel.src_ep,
+        mock.sentinel.dst_ep,
+        mock.sentinel.cluster_id,
+        mock.sentinel.profile_id,
+        mock.sentinel.rxopts,
+        b''
+    )
+    assert app.handle_join.call_count == 0
+    assert app.get_device.call_count == 1
+    assert app.handle_message.call_count == 0
+    assert app._handle_reply.call_count == 0
+
+
 def test_rx_reply(app):
     app._handle_reply = mock.MagicMock()
-    _test_rx(app, mock.MagicMock(), (1, 2, True, []))
+    _test_rx(app, mock.MagicMock(), mock.sentinel.src_nwk, (1, 2, True, []))
     assert app._handle_reply.call_count == 1
 
 
 def test_rx_failed_deserialize(app, caplog):
+    from zigpy.device import Status as DeviceStatus
+
     app._handle_reply = mock.MagicMock()
     app.handle_message = mock.MagicMock()
-    app.get_device = mock.MagicMock(return_value=mock.sentinel.device)
+    nwk = 0x1234
+    ieee, _ = EUI64.deserialize(b'\x01\x02\x03\x04\x05\x06\x07\x08')
+    device = app.add_device(ieee, nwk)
+    device.status = DeviceStatus.ENDPOINTS_INIT
+    app.get_device = mock.MagicMock(return_value=device)
     app.deserialize = mock.MagicMock(side_effect=ValueError)
 
     app.handle_rx(
@@ -100,6 +130,91 @@ def test_rx_failed_deserialize(app, caplog):
 
     assert app._handle_reply.call_count == 0
     assert app.handle_message.call_count == 0
+
+
+@pytest.fixture
+def device(app):
+    def _device(new=False, zdo_init=False, nwk=uint16_t(0x1234)):
+        from zigpy.device import Device, Status as DeviceStatus
+
+        ieee, _ = EUI64.deserialize(b'\x08\x07\x06\x05\x04\x03\x02\x01')
+        dev = Device(app, ieee, nwk)
+        if new:
+            dev.status = DeviceStatus.NEW
+        elif zdo_init:
+            dev.status = DeviceStatus.ZDO_INIT
+        else:
+            dev.status = DeviceStatus.ENDPOINTS_INIT
+        return dev
+    return _device
+
+
+def _device_join(app, dev, data):
+    app.handle_message = mock.MagicMock()
+    app.handle_join = mock.MagicMock()
+
+    deserialized = (1, 2, False, [])
+    dst_ep = 0
+    cluster_id = 0x0013
+
+    _test_rx(app, dev, dev.nwk, deserialized, dst_ep, cluster_id, data)
+    assert app.handle_join.call_count == 1
+    assert app.handle_message.call_count == 1
+
+
+def test_device_join_new(app, device):
+    dev = device()
+    data = b'\xee' + dev.nwk.serialize() + dev.ieee.serialize()
+
+    _device_join(app, dev, data)
+
+
+def test_device_join_inconsistent_nwk(app, device):
+    dev = device()
+    data = b'\xee' + b'\x01\x02' + dev.ieee.serialize()
+
+    _device_join(app, dev, data)
+
+
+def test_device_join_inconsistent_ieee(app, device):
+    dev = device()
+    data = b'\xee' + dev.nwk.serialize() + b'\x01\x02\x03\x04\x05\x06\x07\x08'
+
+    _device_join(app, dev, data)
+
+
+def _device_status_new(app, dev):
+    app.handle_join = mock.MagicMock()
+    app.handle_message = mock.MagicMock()
+    app.handle_reply = mock.MagicMock()
+    app.get_device = mock.MagicMock(return_value=dev)
+    app.deserialize = mock.MagicMock()
+
+    app.handle_rx(
+        b'\x01\x02\x03\x04\x05\x06\x07\x08',
+        dev.nwk,
+        mock.sentinel.src_ep,
+        mock.sentinel.dst_ep,
+        mock.sentinel.cluster_id,
+        mock.sentinel.profile_id,
+        mock.sentinel.rxopts,
+        b'',
+    )
+
+    assert app.deserialize.call_count == 0
+    assert app.handle_join.call_count == 0
+    assert app.handle_message.call_count == 0
+    assert app.handle_reply.call_count == 0
+
+
+def test_handle_rx_device_status_new(app, device):
+    dev = device(new=True)
+    _device_status_new(app, dev)
+
+
+def test_handle_rx_device_status_zdo(app, device):
+    dev = device(zdo_init=True)
+    _device_status_new(app, dev)
 
 
 @pytest.mark.asyncio
@@ -295,7 +410,8 @@ async def test_permit(app):
 async def _test_request(app, do_reply=True, expect_reply=True, **kwargs):
     seq = 123
     nwk = 0x2345
-    app._devices_by_nwk[nwk] = 0x22334455
+    ieee = EUI64(b'\x01\x02\x03\x04\x05\x06\x07\x08')
+    app.add_device(ieee, nwk)
 
     def _mock_seq_command(cmdname, ieee, nwk, src_ep, dst_ep, cluster,
                           profile, radius, options, data):
