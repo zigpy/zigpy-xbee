@@ -7,6 +7,11 @@ import zigpy.types
 import zigpy.util
 
 
+# how long coordinator would hold message for an end device in 10ms units
+CONF_CYCLIC_SLEEP_PERIOD = 0x0300
+# end device poll timeout = 3 * SN * SP * 10ms
+CONF_POLL_TIMEOUT = 0x029b
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -52,6 +57,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             await self.form_network()
 
         await self._api._at_command('NJ', 0)
+        await self._api._at_command('SP', CONF_CYCLIC_SLEEP_PERIOD)
+        await self._api._at_command('SN', CONF_POLL_TIMEOUT)
         id = await self._api._at_command('ID')
         LOGGER.debug("Extended PAN ID: 0x%016x", id)
         id = await self._api._at_command('OP')
@@ -78,6 +85,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._api._queued_at('NK', 0)
         await self._api._queued_at('KY', b'ZigBeeAlliance09')
         await self._api._queued_at('NJ', 0)
+        await self._api._queued_at('SP', CONF_CYCLIC_SLEEP_PERIOD)
+        await self._api._queued_at('SN', CONF_POLL_TIMEOUT)
         try:
             await self._api._queued_at('CE', 1)
         except RuntimeError:
