@@ -137,7 +137,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self._pending.pop(sequence, None)
             raise
 
-    async def permit(self, time_s=60):
+    async def permit_ncp(self, time_s=60):
         assert 0 <= time_s <= 254
         await self._api._at_command('NJ', time_s)
         await self._api._at_command('AC')
@@ -184,3 +184,24 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             return
 
         self.handle_message(device, True, profile, cluster, src_ep, dst_ep, tsn, command_id, args)
+
+    async def broadcast(self, profile, cluster, src_ep, dst_ep, grpid, radius,
+                        sequence, data,
+                        broadcast_address=zigpy.types.BroadcastAddress.RX_ON_WHEN_IDLE):
+        LOGGER.debug("Broadcast request seq %s", sequence)
+        assert sequence not in self._pending
+        broadcast_as_bytes = [
+            zigpy.types.uint8_t(b) for b in broadcast_address.to_bytes(8, 'big')
+        ]
+        self._api._seq_command(
+            'tx_explicit',
+            zigpy.types.EUI64(broadcast_as_bytes),
+            broadcast_address,
+            src_ep,
+            dst_ep,
+            cluster,
+            profile,
+            radius,
+            0x20,
+            data,
+        )

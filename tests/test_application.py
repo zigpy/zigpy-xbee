@@ -103,6 +103,25 @@ def test_rx_failed_deserialize(app, caplog):
 
 
 @pytest.mark.asyncio
+async def test_broadcast(app):
+    (profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data) = (
+        0x260, 1, 2, 3, 0x0100, 0x06, 210, b'\x02\x01\x00'
+    )
+
+    app._api._seq_command = mock.MagicMock(
+        side_effect=asyncio.coroutine(mock.MagicMock())
+    )
+
+    await app.broadcast(
+        profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data)
+    assert app._api._seq_command.call_count == 1
+    assert app._api._seq_command.call_args[0][0] == 'tx_explicit'
+    assert app._api._seq_command.call_args[0][3] == src_ep
+    assert app._api._seq_command.call_args[0][4] == dst_ep
+    assert app._api._seq_command.call_args[0][9] == data
+
+
+@pytest.mark.asyncio
 async def test_get_association_state(app):
     ai_results = (0xff, 0xff, 0xff, 0xff, mock.sentinel.ai)
     app._api._at_command = mock.MagicMock(
@@ -268,7 +287,7 @@ async def test_permit(app):
     app._api._at_command = mock.MagicMock(
         side_effect=asyncio.coroutine(mock.MagicMock()))
     time_s = 30
-    await app.permit(time_s)
+    await app.permit_ncp(time_s)
     assert app._api._at_command.call_count == 3
     assert app._api._at_command.call_args_list[0][0][1] == time_s
 
