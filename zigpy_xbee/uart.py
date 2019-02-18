@@ -52,8 +52,10 @@ class Gateway(asyncio.Protocol):
         """Handles AT command mode response."""
         try:
             data = data.decode('ascii')
-        except Exception:
-            pass
+        except UnicodeDecodeError as ex:
+            LOGGER.debug("Couldn't ascii decode AT command mode response: %s",
+                         ex)
+            raise
         LOGGER.debug("Handling AT command mode response: %s", data)
         self._api.handle_command_mode_rsp(data)
 

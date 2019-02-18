@@ -128,3 +128,22 @@ class EUI64(zigpy.types.EUI64):
     def serialize(self):
         assert self._length == len(self)
         return b''.join([i.serialize() for i in self])
+
+
+class UndefinedEnumMeta(enum.EnumMeta):
+    def __call__(cls, value=None, *args, **kwargs):
+        if value is None:
+            # the 1st enum member is default
+            return next(iter(cls))
+
+        try:
+            return super().__call__(value, *args, **kwargs)
+        except ValueError as exc:
+            try:
+                return super().__call__(cls._UNDEFINED)
+            except AttributeError:
+                raise exc
+
+
+class UndefinedEnum(enum.Enum, metaclass=UndefinedEnumMeta):
+    pass
