@@ -287,7 +287,7 @@ async def test_permit(app):
     app._api._at_command = mock.MagicMock(
         side_effect=asyncio.coroutine(mock.MagicMock()))
     time_s = 30
-    await app.permit(time_s)
+    await app.permit_ncp(time_s)
     assert app._api._at_command.call_count == 3
     assert app._api._at_command.call_args_list[0][0][1] == time_s
 
