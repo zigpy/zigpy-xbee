@@ -170,7 +170,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self.handle_join(nwk, ieee, 0)
 
         try:
-            device = self.get_device(ieee=ember_ieee)
+            if ember_ieee == zigpy.types.EUI64(b'\xff\xff\xff\xff\xff\xff\xff\xff'):
+                LOGGER.debug("Device reports a generic ieee, looking up by nwk")
+                device = self.get_device(nwk=src_nwk)
+            else:
+                device = self.get_device(ieee=ember_ieee)
         except KeyError:
             LOGGER.debug("Received frame from unknown device: 0x%04x/%s",
                          src_nwk, str(ember_ieee))
