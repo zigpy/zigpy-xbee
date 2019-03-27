@@ -490,3 +490,10 @@ def test_handle_reply_unexpected(app):
 @pytest.mark.asyncio
 async def test_force_remove(app):
     await app.force_remove(mock.sentinel.device)
+
+
+@pytest.mark.asyncio
+async def test_shutdown(app):
+    app._api.close = mock.MagicMock()
+    await app.shutdown()
+    assert app._api.close.call_count == 1
