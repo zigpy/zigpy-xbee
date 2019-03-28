@@ -42,9 +42,9 @@ def _test_rx(app, device, nwk, deserialized,
 
 
 def _test_rx_ieee_generic(app, device, nwk, deserialized,
-             dst_ep=mock.sentinel.dst_ep,
-             cluster_id=mock.sentinel.cluster_id,
-             data=b''):
+                          dst_ep=mock.sentinel.dst_ep,
+                          cluster_id=mock.sentinel.cluster_id,
+                          data=b''):
     app.get_device = mock.MagicMock(return_value=device)
     app.deserialize = mock.MagicMock(return_value=deserialized)
 
