@@ -24,6 +24,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._pending = {}
         self._nwk = 0
 
+    async def shutdown(self):
+        """Shutdown application."""
+        self._api.close()
+
     async def startup(self, auto_form=False):
         """Perform a complete application startup"""
         try:

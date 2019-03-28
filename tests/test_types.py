@@ -71,3 +71,10 @@ def test_undefined_enum_undefinede():
 
     with pytest.raises(ValueError):
         undEnum(0xEE)
+
+
+def test_nwk():
+    nwk = t.NWK(0x1234)
+
+    assert str(nwk) == '0x1234'
+    assert repr(nwk) == '0x1234'
