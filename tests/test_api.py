@@ -365,3 +365,9 @@ def test_set_application(api):
 
 def test_handle_route_record_indicator(api):
     api._handle_route_record_indicator(mock.sentinel.ri)
+
+
+def test_handle_many_to_one_rri(api):
+    ieee = t.EUI64([t.uint8_t(a) for a in range(0, 8)])
+    nwk = 0x1234
+    api._handle_many_to_one_rri([ieee, nwk, 0])

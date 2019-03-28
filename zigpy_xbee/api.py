@@ -34,7 +34,7 @@ COMMANDS = {
     'remote_at': (0x17, (), None),
     'tx': (0x10, (), None),
     'tx_explicit': (0x11, (t.uint8_t, t.EUI64, t.uint16_t, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), None),
-    'create_source_route': (0x21, (), None),
+    'create_source_route': (0x21, (t.uint8_t, t.EUI64, t.uint16_t, t.uint8_t, LVList(t.uint16_t)), None),
     'register_joining_device': (0x24, (), None),
 
     'at_response': (0x88, (t.uint8_t, t.ATCommand, t.uint8_t, t.Bytes), None),
@@ -47,7 +47,7 @@ COMMANDS = {
     'remote_at_response': (0x97, (), None),
     'extended_status': (0x98, (), None),
     'route_record_indicator': (0xA1, (t.EUI64, t.uint16_t, t.uint8_t, LVList(t.uint16_t)), None),
-    'many_to_one_rri': (0xA3, (), None),
+    'many_to_one_rri': (0xA3, (t.EUI64, t.uint16_t, t.uint8_t), None),
     'node_id_indicator': (0x95, (), None),
 
 }
@@ -287,6 +287,9 @@ class XBee:
 
         response, remains = response_type.deserialize(data[3])
         fut.set_result(response)
+
+    def _handle_many_to_one_rri(self, data):
+        LOGGER.debug("_handle_many_to_one_rri: %s", data)
 
     def _handle_modem_status(self, data):
         LOGGER.debug("Handle modem status frame: %s", data)
