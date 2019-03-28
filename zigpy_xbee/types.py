@@ -147,3 +147,11 @@ class UndefinedEnumMeta(enum.EnumMeta):
 
 class UndefinedEnum(enum.Enum, metaclass=UndefinedEnumMeta):
     pass
+
+
+class NWK(uint16_t):
+    def __repr__(self):
+        return '0x{:04x}'.format(self)
+
+    def __str__(self):
+        return '0x{:04x}'.format(self)

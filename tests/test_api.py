@@ -155,6 +155,25 @@ def test_frame_received(api, monkeypatch):
         my_handler.reset_mock()
 
 
+def test_frame_received_no_handler(api, monkeypatch):
+    monkeypatch.setattr(t, 'deserialize', mock.MagicMock(
+        return_value=(b'deserialized data', b'')))
+    my_handler = mock.MagicMock()
+    cmd = 'no_handler'
+    cmd_id = 0x00
+    xbee_api.COMMANDS[cmd] = (cmd_id, (), None)
+    api._commands_by_id[cmd_id] = cmd
+
+    cmd_opts = xbee_api.COMMANDS[cmd]
+    cmd_id = cmd_opts[0]
+    payload = b'\x01\x02\x03\x04'
+    data = cmd_id.to_bytes(1, 'big') + payload
+    api.frame_received(data)
+    assert t.deserialize.call_count == 1
+    assert t.deserialize.call_args[0][0] == payload
+    assert my_handler.call_count == 0
+
+
 def _handle_at_response(api, tsn, status, at_response=b''):
     data = (tsn, 'AI'.encode('ascii'), status, at_response)
     response = asyncio.Future()
@@ -346,3 +365,9 @@ def test_set_application(api):
 
 def test_handle_route_record_indicator(api):
     api._handle_route_record_indicator(mock.sentinel.ri)
+
+
+def test_handle_many_to_one_rri(api):
+    ieee = t.EUI64([t.uint8_t(a) for a in range(0, 8)])
+    nwk = 0x1234
+    api._handle_many_to_one_rri([ieee, nwk, 0])

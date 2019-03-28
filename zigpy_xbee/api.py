@@ -1,4 +1,5 @@
 import asyncio
+import binascii
 import enum
 import logging
 
@@ -32,21 +33,21 @@ COMMANDS = {
     'queued_at': (0x09, (t.uint8_t, t.ATCommand, t.Bytes), 0x88),
     'remote_at': (0x17, (), None),
     'tx': (0x10, (), None),
-    'tx_explicit': (0x11, (t.uint8_t, t.EUI64, t.uint16_t, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), None),
-    'create_source_route': (0x21, (), None),
+    'tx_explicit': (0x11, (t.uint8_t, t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), None),
+    'create_source_route': (0x21, (t.uint8_t, t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)), None),
     'register_joining_device': (0x24, (), None),
 
     'at_response': (0x88, (t.uint8_t, t.ATCommand, t.uint8_t, t.Bytes), None),
     'modem_status': (0x8A, (ModemStatus, ), None),
-    'tx_status': (0x8B, (t.uint8_t, t.uint16_t, t.uint8_t, t.uint8_t, t.uint8_t), None),
+    'tx_status': (0x8B, (t.uint8_t, t.NWK, t.uint8_t, t.uint8_t, t.uint8_t), None),
     'route_information': (0x8D, (), None),
     'rx': (0x90, (), None),
-    'explicit_rx_indicator': (0x91, (t.EUI64, t.uint16_t, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.Bytes), None),
+    'explicit_rx_indicator': (0x91, (t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.Bytes), None),
     'rx_io_data_long_addr': (0x92, (), None),
     'remote_at_response': (0x97, (), None),
     'extended_status': (0x98, (), None),
-    'route_record_indicator': (0xA1, (t.EUI64, t.uint16_t, t.uint8_t, LVList(t.uint16_t)), None),
-    'many_to_one_rri': (0xA3, (), None),
+    'route_record_indicator': (0xA1, (t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)), None),
+    'many_to_one_rri': (0xA3, (t.EUI64, t.NWK, t.uint8_t), None),
     'node_id_indicator': (0x95, (), None),
 
 }
@@ -261,7 +262,11 @@ class XBee:
         command = self._commands_by_id[data[0]]
         LOGGER.debug("Frame received: %s", command)
         data, rest = t.deserialize(data[1:], COMMANDS[command][1])
-        getattr(self, '_handle_%s' % (command, ))(data)
+        try:
+            getattr(self, '_handle_%s' % (command, ))(data)
+        except AttributeError:
+            LOGGER.error("No '%s' handler. Data: %s", command,
+                         binascii.hexlify(data))
 
     def _handle_at_response(self, data):
         fut, = self._awaiting.pop(data[0])
@@ -282,6 +287,9 @@ class XBee:
 
         response, remains = response_type.deserialize(data[3])
         fut.set_result(response)
+
+    def _handle_many_to_one_rri(self, data):
+        LOGGER.debug("_handle_many_to_one_rri: %s", data)
 
     def _handle_modem_status(self, data):
         LOGGER.debug("Handle modem status frame: %s", data)
