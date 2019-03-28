@@ -41,6 +41,27 @@ def _test_rx(app, device, nwk, deserialized,
     assert app.deserialize.call_count == 1
 
 
+def _test_rx_ieee_generic(app, device, nwk, deserialized,
+             dst_ep=mock.sentinel.dst_ep,
+             cluster_id=mock.sentinel.cluster_id,
+             data=b''):
+    app.get_device = mock.MagicMock(return_value=device)
+    app.deserialize = mock.MagicMock(return_value=deserialized)
+
+    app.handle_rx(
+        b'\xff\xff\xff\xff\xff\xff\xff\xff',
+        nwk,
+        mock.sentinel.src_ep,
+        dst_ep,
+        cluster_id,
+        mock.sentinel.profile_id,
+        mock.sentinel.rxopts,
+        data,
+    )
+
+    assert app.deserialize.call_count == 1
+
+
 def test_rx(app):
     device = mock.MagicMock()
     app.handle_message = mock.MagicMock()

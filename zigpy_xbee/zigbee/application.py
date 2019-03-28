@@ -175,7 +175,6 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         try:
             if ember_ieee == zigpy.types.EUI64(b'\xff\xff\xff\xff\xff\xff\xff\xff'):
-                LOGGER.debug("Device reports a generic ieee, looking up by nwk")
                 device = self.get_device(nwk=src_nwk)
             else:
                 device = self.get_device(ieee=ember_ieee)
