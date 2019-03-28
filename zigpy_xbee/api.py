@@ -1,4 +1,5 @@
 import asyncio
+import binascii
 import enum
 import logging
 
@@ -261,7 +262,11 @@ class XBee:
         command = self._commands_by_id[data[0]]
         LOGGER.debug("Frame received: %s", command)
         data, rest = t.deserialize(data[1:], COMMANDS[command][1])
-        getattr(self, '_handle_%s' % (command, ))(data)
+        try:
+            getattr(self, '_handle_%s' % (command, ))(data)
+        except AttributeError:
+            LOGGER.error("No '%s' handler. Data: %s", command,
+                         binascii.hexlify(data))
 
     def _handle_at_response(self, data):
         fut, = self._awaiting.pop(data[0])
