@@ -3,8 +3,8 @@
 from setuptools import find_packages, setup
 
 setup(
-    name="zigpy-xbee",
-    version="0.1.2",
+    name="zigpy-xbee-homeassistant",
+    version="0.1.3",
     description="A library which communicates with XBee radios for zigpy",
     url="http://github.com/zigpy/zigpy-xbee",
     author="Russell Cloran",
