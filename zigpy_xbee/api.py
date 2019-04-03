@@ -31,7 +31,7 @@ class ModemStatus(t.uint8_t, t.UndefinedEnum):
 COMMANDS = {
     'at': (0x08, (t.FrameId, t.ATCommand, t.Bytes), 0x88),
     'queued_at': (0x09, (t.FrameId, t.ATCommand, t.Bytes), 0x88),
-    'remote_at': (0x17, (), None),
+    'remote_at': (0x17, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.ATCommand, t.Bytes), 0x97),
     'tx': (0x10, (), None),
     'tx_explicit': (0x11, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), None),
     'create_source_route': (0x21, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)), None),
@@ -44,7 +44,7 @@ COMMANDS = {
     'rx': (0x90, (), None),
     'explicit_rx_indicator': (0x91, (t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.Bytes), None),
     'rx_io_data_long_addr': (0x92, (), None),
-    'remote_at_response': (0x97, (), None),
+    'remote_at_response': (0x97, (t.FrameId, t.EUI64, t.NWK, t.ATCommand, t.uint8_t, t.Bytes), None),
     'extended_status': (0x98, (), None),
     'route_record_indicator': (0xA1, (t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)), None),
     'many_to_one_rri': (0xA3, (t.EUI64, t.NWK, t.uint8_t), None),
