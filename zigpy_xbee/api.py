@@ -29,17 +29,17 @@ class ModemStatus(t.uint8_t, t.UndefinedEnum):
 
 # https://www.digi.com/resources/documentation/digidocs/PDFs/90000976.pdf
 COMMANDS = {
-    'at': (0x08, (t.uint8_t, t.ATCommand, t.Bytes), 0x88),
-    'queued_at': (0x09, (t.uint8_t, t.ATCommand, t.Bytes), 0x88),
+    'at': (0x08, (t.FrameId, t.ATCommand, t.Bytes), 0x88),
+    'queued_at': (0x09, (t.FrameId, t.ATCommand, t.Bytes), 0x88),
     'remote_at': (0x17, (), None),
     'tx': (0x10, (), None),
-    'tx_explicit': (0x11, (t.uint8_t, t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), None),
-    'create_source_route': (0x21, (t.uint8_t, t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)), None),
+    'tx_explicit': (0x11, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), None),
+    'create_source_route': (0x21, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)), None),
     'register_joining_device': (0x24, (), None),
 
-    'at_response': (0x88, (t.uint8_t, t.ATCommand, t.uint8_t, t.Bytes), None),
+    'at_response': (0x88, (t.FrameId, t.ATCommand, t.uint8_t, t.Bytes), None),
     'modem_status': (0x8A, (ModemStatus, ), None),
-    'tx_status': (0x8B, (t.uint8_t, t.NWK, t.uint8_t, t.uint8_t, t.uint8_t), None),
+    'tx_status': (0x8B, (t.FrameId, t.NWK, t.uint8_t, t.uint8_t, t.uint8_t), None),
     'route_information': (0x8D, (), None),
     'rx': (0x90, (), None),
     'explicit_rx_indicator': (0x91, (t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.Bytes), None),
