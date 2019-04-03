@@ -3,14 +3,19 @@ import binascii
 import logging
 
 import zigpy.application
+import zigpy.exceptions
 import zigpy.types
 import zigpy.util
+import zigpy.zdo.types
+
+from zigpy_xbee.types import UNKNOWN_IEEE
 
 
 # how long coordinator would hold message for an end device in 10ms units
 CONF_CYCLIC_SLEEP_PERIOD = 0x0300
 # end device poll timeout = 3 * SN * SP * 10ms
 CONF_POLL_TIMEOUT = 0x029b
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -72,6 +77,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             LOGGER.debug("Coordinator %s", 'enabled' if ce else 'disabled')
         except RuntimeError as exc:
             LOGGER.debug("sending CE command: %s", exc)
+        self.add_device(self.ieee, self.nwk)
 
     async def force_remove(self, dev):
         """Forcibly remove device from NCP."""
@@ -174,11 +180,15 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self.handle_join(nwk, ieee, 0)
 
         try:
-            device = self.get_device(ieee=ember_ieee)
+            device = self.get_device(nwk=src_nwk)
         except KeyError:
-            LOGGER.debug("Received frame from unknown device: 0x%04x/%s",
-                         src_nwk, str(ember_ieee))
-            return
+            if ember_ieee != UNKNOWN_IEEE and ember_ieee in self.devices:
+                self.handle_join(src_nwk, ember_ieee, 0)
+                device = self.get_device(ieee=ember_ieee)
+            else:
+                LOGGER.debug("Received frame from unknown device: 0x%04x/%s",
+                             src_nwk, str(ember_ieee))
+                return
 
         if device.status == zigpy.device.Status.NEW and dst_ep != 0:
             # only allow ZDO responses while initializing device

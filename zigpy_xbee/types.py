@@ -155,3 +155,7 @@ class NWK(uint16_t):
 
     def __str__(self):
         return '0x{:04x}'.format(self)
+
+
+UNKNOWN_IEEE = EUI64([uint8_t(0xff) for i in range(0, 8)])
+UNKNOWN_NWK = NWK(0xfffe)
