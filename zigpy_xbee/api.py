@@ -1,6 +1,7 @@
 import asyncio
 import binascii
 import enum
+import functools
 import logging
 
 from zigpy.types import LVList
@@ -235,16 +236,6 @@ class XBee:
         LOGGER.debug("Sequenced command: %s %s", name, args)
         return self._command(name, self._seq, *args)
 
-    def _queued_at(self, name, *args):
-        LOGGER.debug("Queue AT command: %s %s", name, args)
-        data = t.serialize(args, (AT_COMMANDS[name], ))
-        return self._command(
-            'queued_at',
-            self._seq,
-            name.encode('ascii'),
-            data,
-        )
-
     async def _remote_at_command(self, ieee, nwk, options, name, *args):
         LOGGER.debug("Remote AT command: %s %s", name, args)
         data = t.serialize(args, (AT_COMMANDS[name], ))
@@ -257,16 +248,19 @@ class XBee:
             LOGGER.warning("No response to %s command", name)
             raise
 
-    async def _at_command(self, name, *args):
-        LOGGER.debug("AT command: %s %s", name, args)
+    async def _at_partial(self, cmd_type, name, *args):
+        LOGGER.debug("%s command: %s %s", cmd_type, name, args)
         data = t.serialize(args, (AT_COMMANDS[name], ))
         try:
             return await asyncio.wait_for(
-                self._command('at', self._seq, name.encode('ascii'), data,),
+                self._command(cmd_type, self._seq, name.encode('ascii'), data),
                 timeout=AT_COMMAND_TIMEOUT)
         except asyncio.TimeoutError:
-            LOGGER.warning("No response to %s command", name)
+            LOGGER.warning("%s: No response to %s command", cmd_type, name)
             raise
+
+    _at_command = functools.partialmethod(_at_partial, 'at')
+    _queued_at = functools.partialmethod(_at_partial, 'queued_at')
 
     def _api_frame(self, name, *args):
         c = COMMANDS[name]
