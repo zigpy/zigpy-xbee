@@ -147,6 +147,18 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self._pending.pop(sequence, None)
             raise
 
+    @zigpy.util.retryable_request
+    def remote_at_command(self, nwk, cmd_name, *args, apply_changes=True,
+                          encryption=True):
+        LOGGER.debug("Remote AT%s command: %s", cmd_name, args)
+        options = zigpy.types.uint8_t(0)
+        if apply_changes:
+            options |= 0x02
+        if encryption:
+            options |= 0x20
+        dev = self.get_device(nwk=nwk)
+        return self._api._remote_at_command(dev.ieee, nwk, options, cmd_name, *args)
+
     async def permit_ncp(self, time_s=60):
         assert 0 <= time_s <= 254
         await self._api._at_command('NJ', time_s)
