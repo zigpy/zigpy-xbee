@@ -11,6 +11,7 @@ from . import types as t
 LOGGER = logging.getLogger(__name__)
 
 AT_COMMAND_TIMEOUT = 2
+REMOTE_AT_COMMAND_TIMEOUT = 30
 
 
 class ModemStatus(t.uint8_t, t.UndefinedEnum):
@@ -183,6 +184,7 @@ class ATCommandResult(enum.IntEnum):
     ERROR = 1
     INVALID_COMMAND = 2
     INVALID_PARAMETER = 3
+    TX_FAILURE = 4
 
 
 class XBee:
@@ -243,6 +245,18 @@ class XBee:
             data,
         )
 
+    async def _remote_at_command(self, ieee, nwk, options, name, *args):
+        LOGGER.debug("Remote AT command: %s %s", name, args)
+        data = t.serialize(args, (AT_COMMANDS[name], ))
+        try:
+            return await asyncio.wait_for(
+                self._command('remote_at', self._seq, ieee, nwk, options,
+                              name.encode('ascii'), data,),
+                timeout=REMOTE_AT_COMMAND_TIMEOUT)
+        except asyncio.TimeoutError:
+            LOGGER.warning("No response to %s command", name)
+            raise
+
     async def _at_command(self, name, *args):
         LOGGER.debug("AT command: %s %s", name, args)
         data = t.serialize(args, (AT_COMMANDS[name], ))
@@ -287,6 +301,11 @@ class XBee:
 
         response, remains = response_type.deserialize(data[3])
         fut.set_result(response)
+
+    def _handle_remote_at_response(self, data):
+        """Remote AT command response."""
+        LOGGER.debug("Remote AT command response: %s", data)
+        return self._handle_at_response((data[0], data[3], data[4], data[5]))
 
     def _handle_many_to_one_rri(self, data):
         LOGGER.debug("_handle_many_to_one_rri: %s", data)
