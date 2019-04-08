@@ -76,14 +76,41 @@ def test_rx_nwk_0000(app):
     assert app._handle_reply.call_count == 0
 
 
-def test_rx_unknown_device(app):
+def test_rx_unknown_device(app, device):
+    """Unknown NWK, but existing device."""
+    app._handle_reply = mock.MagicMock()
+    app.handle_message = mock.MagicMock()
+    app.handle_join = mock.MagicMock()
+    dev = device(nwk=0x1234)
+    app.devices[dev.ieee] = dev
+    app.get_device = mock.MagicMock(side_effect=[KeyError, dev])
+    app.deserialize = mock.MagicMock(side_effect=ValueError)
+    app.handle_rx(
+        b'\x01\x02\x03\x04\x05\x06\x07\x08',
+        0x3334,
+        mock.sentinel.src_ep,
+        mock.sentinel.dst_ep,
+        mock.sentinel.cluster_id,
+        mock.sentinel.profile_id,
+        mock.sentinel.rxopts,
+        b''
+    )
+    assert app.handle_join.call_count == 1
+    assert app.get_device.call_count == 2
+    assert app.handle_message.call_count == 0
+    assert app._handle_reply.call_count == 0
+
+
+def test_rx_unknown_device_iee(app):
+    """Unknown NWK, and unknown IEEE."""
     app._handle_reply = mock.MagicMock()
     app.handle_message = mock.MagicMock()
     app.handle_join = mock.MagicMock()
     app.get_device = mock.MagicMock(side_effect=KeyError)
+    app.deserialize = mock.MagicMock(side_effect=ValueError)
     app.handle_rx(
-        b'\x01\x02\x03\x04\x05\x06\x07\x08',
-        0x1234,
+        b'\xff\xff\xff\xff\xff\xff\xff\xff',
+        0x3334,
         mock.sentinel.src_ep,
         mock.sentinel.dst_ep,
         mock.sentinel.cluster_id,
