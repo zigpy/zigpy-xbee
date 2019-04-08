@@ -4,6 +4,7 @@ import enum
 import functools
 import logging
 
+from zigpy.exceptions import DeliveryError
 from zigpy.types import LVList
 
 from . import uart
@@ -35,7 +36,7 @@ COMMAND_REQUESTS = {
     'queued_at': (0x09, (t.FrameId, t.ATCommand, t.Bytes), 0x88),
     'remote_at': (0x17, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.ATCommand, t.Bytes), 0x97),
     'tx': (0x10, (), None),
-    'tx_explicit': (0x11, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), None),
+    'tx_explicit': (0x11, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), 0x8b),
     'create_source_route': (0x21, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)), None),
     'register_joining_device': (0x24, (), None),
 }
@@ -330,11 +331,26 @@ class XBee:
         LOGGER.debug("_handle_route_record_indicator: %s",
                      (ieee, src, rx_opts, hops))
 
-    def _handle_tx_status(self, frame_id, dst_nwk, tries, tx_status,
-                          dsc_status):
+    def _handle_tx_status(self, frame_id, nwk, tries, tx_status, dsc_status):
         LOGGER.debug(
-            ("tx_status: %s --> 0x%04x after %i tries. Discovery Status: %s,"
-             " Frame #%i"), tx_status, dst_nwk, tries, dsc_status, frame_id)
+            ("tx_explicit to 0x%04x: %s after %i tries. Discovery Status: %s,"
+             " Frame #%i"), nwk, tx_status, tries, dsc_status, frame_id)
+        try:
+            fut, = self._awaiting.pop(frame_id)
+        except KeyError:
+            LOGGER.debug("unexpected tx_status report received")
+            return
+
+        try:
+            if tx_status in (t.TXStatus.BROADCAST_APS_TX_ATTEMPT,
+                             t.TXStatus.SELF_ADDRESSED,
+                             t.TXStatus.SUCCESS):
+                fut.set_result(tx_status)
+            else:
+                fut.set_exception(
+                    DeliveryError('%s' % (tx_status, )))
+        except asyncio.InvalidStateError as ex:
+            LOGGER.debug("duplicate tx_status for %s nwk? State: %s", nwk, ex)
 
     def set_application(self, app):
         self._app = app
