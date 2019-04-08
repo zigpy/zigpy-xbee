@@ -125,6 +125,51 @@ async def test_queued_at_command(api, monkeypatch):
     await _test_at_or_queued_at_command(api, api._queued_at, monkeypatch)
 
 
+async def _test_remote_at_command(api, monkeypatch, do_reply=True):
+    monkeypatch.setattr(t, 'serialize', mock.MagicMock(return_value=mock.sentinel.serialize))
+
+    def mock_command(name, *args):
+        rsp = xbee_api.COMMANDS[name][2]
+        ret = None
+        if rsp:
+            ret = asyncio.Future()
+            if do_reply:
+                ret.set_result(mock.sentinel.at_result)
+        return ret
+
+    api._command = mock.MagicMock(side_effect=mock_command)
+    api._seq = mock.sentinel.seq
+
+    for at_cmd in xbee_api.AT_COMMANDS:
+        res = await api._remote_at_command(
+            mock.sentinel.ieee, mock.sentinel.nwk, mock.sentinel.opts, at_cmd,
+            mock.sentinel.args)
+        assert t.serialize.call_count == 1
+        assert api._command.call_count == 1
+        assert api._command.call_args[0][0] == 'remote_at'
+        assert api._command.call_args[0][1] == mock.sentinel.seq
+        assert api._command.call_args[0][2] == mock.sentinel.ieee
+        assert api._command.call_args[0][3] == mock.sentinel.nwk
+        assert api._command.call_args[0][4] == mock.sentinel.opts
+        assert api._command.call_args[0][5] == at_cmd.encode('ascii')
+        assert api._command.call_args[0][6] == mock.sentinel.serialize
+        assert res == mock.sentinel.at_result
+        t.serialize.reset_mock()
+        api._command.reset_mock()
+
+
+@pytest.mark.asyncio
+async def test_remote_at_cmd(api, monkeypatch):
+    await _test_remote_at_command(api, monkeypatch)
+
+
+@pytest.mark.asyncio
+async def test_remote_at_cmd_no_rsp(api, monkeypatch):
+    monkeypatch.setattr(xbee_api, 'REMOTE_AT_COMMAND_TIMEOUT', 0.1)
+    with pytest.raises(asyncio.TimeoutError):
+        await _test_remote_at_command(api, monkeypatch, do_reply=False)
+
+
 def test_api_frame(api):
     ieee = t.EUI64([t.uint8_t(a) for a in range(0, 8)])
     for cmd_name, cmd_opts in xbee_api.COMMANDS.items():
@@ -213,6 +258,18 @@ def test_handle_at_response_undef_error(api):
     fut = _handle_at_response(api, tsn, status, [response])
     assert fut.done() is True
     assert fut.exception() is not None
+
+
+def test_handle_remote_at_rsp(api):
+    api._handle_at_response = mock.MagicMock()
+    s = mock.sentinel
+    api._handle_remote_at_response([s.frame_id, s.ieee, s.nwk, s.cmd,
+                                    s.status, s.data])
+    assert api._handle_at_response.call_count == 1
+    assert api._handle_at_response.call_args[0][0][0] == s.frame_id
+    assert api._handle_at_response.call_args[0][0][1] == s.cmd
+    assert api._handle_at_response.call_args[0][0][2] == s.status
+    assert api._handle_at_response.call_args[0][0][3] == s.data
 
 
 def _send_modem_event(api, event):

@@ -1,6 +1,7 @@
 import asyncio
 import binascii
 import enum
+import functools
 import logging
 
 from zigpy.types import LVList
@@ -11,6 +12,7 @@ from . import types as t
 LOGGER = logging.getLogger(__name__)
 
 AT_COMMAND_TIMEOUT = 2
+REMOTE_AT_COMMAND_TIMEOUT = 30
 
 
 class ModemStatus(t.uint8_t, t.UndefinedEnum):
@@ -29,22 +31,22 @@ class ModemStatus(t.uint8_t, t.UndefinedEnum):
 
 # https://www.digi.com/resources/documentation/digidocs/PDFs/90000976.pdf
 COMMANDS = {
-    'at': (0x08, (t.uint8_t, t.ATCommand, t.Bytes), 0x88),
-    'queued_at': (0x09, (t.uint8_t, t.ATCommand, t.Bytes), 0x88),
-    'remote_at': (0x17, (), None),
+    'at': (0x08, (t.FrameId, t.ATCommand, t.Bytes), 0x88),
+    'queued_at': (0x09, (t.FrameId, t.ATCommand, t.Bytes), 0x88),
+    'remote_at': (0x17, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.ATCommand, t.Bytes), 0x97),
     'tx': (0x10, (), None),
-    'tx_explicit': (0x11, (t.uint8_t, t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), None),
-    'create_source_route': (0x21, (t.uint8_t, t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)), None),
+    'tx_explicit': (0x11, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), None),
+    'create_source_route': (0x21, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)), None),
     'register_joining_device': (0x24, (), None),
 
-    'at_response': (0x88, (t.uint8_t, t.ATCommand, t.uint8_t, t.Bytes), None),
+    'at_response': (0x88, (t.FrameId, t.ATCommand, t.uint8_t, t.Bytes), None),
     'modem_status': (0x8A, (ModemStatus, ), None),
-    'tx_status': (0x8B, (t.uint8_t, t.NWK, t.uint8_t, t.uint8_t, t.uint8_t), None),
+    'tx_status': (0x8B, (t.FrameId, t.NWK, t.uint8_t, t.uint8_t, t.uint8_t), None),
     'route_information': (0x8D, (), None),
     'rx': (0x90, (), None),
     'explicit_rx_indicator': (0x91, (t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.Bytes), None),
     'rx_io_data_long_addr': (0x92, (), None),
-    'remote_at_response': (0x97, (), None),
+    'remote_at_response': (0x97, (t.FrameId, t.EUI64, t.NWK, t.ATCommand, t.uint8_t, t.Bytes), None),
     'extended_status': (0x98, (), None),
     'route_record_indicator': (0xA1, (t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)), None),
     'many_to_one_rri': (0xA3, (t.EUI64, t.NWK, t.uint8_t), None),
@@ -183,6 +185,7 @@ class ATCommandResult(enum.IntEnum):
     ERROR = 1
     INVALID_COMMAND = 2
     INVALID_PARAMETER = 3
+    TX_FAILURE = 4
 
 
 class XBee:
@@ -233,26 +236,31 @@ class XBee:
         LOGGER.debug("Sequenced command: %s %s", name, args)
         return self._command(name, self._seq, *args)
 
-    def _queued_at(self, name, *args):
-        LOGGER.debug("Queue AT command: %s %s", name, args)
-        data = t.serialize(args, (AT_COMMANDS[name], ))
-        return self._command(
-            'queued_at',
-            self._seq,
-            name.encode('ascii'),
-            data,
-        )
-
-    async def _at_command(self, name, *args):
-        LOGGER.debug("AT command: %s %s", name, args)
+    async def _remote_at_command(self, ieee, nwk, options, name, *args):
+        LOGGER.debug("Remote AT command: %s %s", name, args)
         data = t.serialize(args, (AT_COMMANDS[name], ))
         try:
             return await asyncio.wait_for(
-                self._command('at', self._seq, name.encode('ascii'), data,),
-                timeout=AT_COMMAND_TIMEOUT)
+                self._command('remote_at', self._seq, ieee, nwk, options,
+                              name.encode('ascii'), data,),
+                timeout=REMOTE_AT_COMMAND_TIMEOUT)
         except asyncio.TimeoutError:
             LOGGER.warning("No response to %s command", name)
             raise
+
+    async def _at_partial(self, cmd_type, name, *args):
+        LOGGER.debug("%s command: %s %s", cmd_type, name, args)
+        data = t.serialize(args, (AT_COMMANDS[name], ))
+        try:
+            return await asyncio.wait_for(
+                self._command(cmd_type, self._seq, name.encode('ascii'), data),
+                timeout=AT_COMMAND_TIMEOUT)
+        except asyncio.TimeoutError:
+            LOGGER.warning("%s: No response to %s command", cmd_type, name)
+            raise
+
+    _at_command = functools.partialmethod(_at_partial, 'at')
+    _queued_at = functools.partialmethod(_at_partial, 'queued_at')
 
     def _api_frame(self, name, *args):
         c = COMMANDS[name]
@@ -287,6 +295,11 @@ class XBee:
 
         response, remains = response_type.deserialize(data[3])
         fut.set_result(response)
+
+    def _handle_remote_at_response(self, data):
+        """Remote AT command response."""
+        LOGGER.debug("Remote AT command response: %s", data)
+        return self._handle_at_response((data[0], data[3], data[4], data[5]))
 
     def _handle_many_to_one_rri(self, data):
         LOGGER.debug("_handle_many_to_one_rri: %s", data)

@@ -524,3 +524,18 @@ async def test_shutdown(app):
     app._api.close = mock.MagicMock()
     await app.shutdown()
     assert app._api.close.call_count == 1
+
+
+def test_remote_at_cmd(app, device):
+    dev = device()
+    app.get_device = mock.MagicMock(return_value=dev)
+    app._api = mock.MagicMock(spec=XBee)
+    s = mock.sentinel
+    app.remote_at_command(s.nwk, s.cmd, s.data,
+                          apply_changes=True, encryption=True)
+    assert app._api._remote_at_command.call_count == 1
+    assert app._api._remote_at_command.call_args[0][0] is dev.ieee
+    assert app._api._remote_at_command.call_args[0][1] == s.nwk
+    assert app._api._remote_at_command.call_args[0][2] == 0x22
+    assert app._api._remote_at_command.call_args[0][3] == s.cmd
+    assert app._api._remote_at_command.call_args[0][4] == s.data
