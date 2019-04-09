@@ -126,8 +126,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self._pending[sequence] = reply_fut
 
         dev = self.get_device(nwk=nwk)
-        self._api._command(
-            'tx_explicit',
+        self._api.tx_explicit(
             dev.ieee,
             nwk,
             src_ep,
@@ -246,8 +245,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         broadcast_as_bytes = [
             zigpy.types.uint8_t(b) for b in broadcast_address.to_bytes(8, 'big')
         ]
-        self._api._command(
-            'tx_explicit',
+        self._api.tx_explicit(
             zigpy.types.EUI64(broadcast_as_bytes),
             broadcast_address,
             src_ep,

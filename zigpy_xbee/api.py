@@ -399,3 +399,8 @@ class XBee:
         LOGGER.debug(("Couldn't enter AT command mode at any known baudrate."
                       "Configure XBee manually for escaped API mode ATAP2"))
         return False
+
+    def __getattr__(self, item):
+        if item in COMMAND_REQUESTS:
+            return functools.partial(self._command, item)
+        raise AttributeError("Unknown command {}".format(item))
