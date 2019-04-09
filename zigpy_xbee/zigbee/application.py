@@ -126,7 +126,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self._pending[sequence] = reply_fut
 
         dev = self.get_device(nwk=nwk)
-        self._api._seq_command(
+        self._api._command(
             'tx_explicit',
             dev.ieee,
             nwk,
@@ -214,7 +214,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         try:
             tsn, command_id, is_reply, args = self.deserialize(device, src_ep, cluster_id, data)
         except ValueError as e:
-            LOGGER.error("Failed to parse message (%s) on cluster %d, because %s", binascii.hexlify(data), cluster_id, e)
+            LOGGER.error("Failed to parse message (%s) on cluster %s, because %s", binascii.hexlify(data), cluster_id, e)
             return
 
         if is_reply:
@@ -246,7 +246,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         broadcast_as_bytes = [
             zigpy.types.uint8_t(b) for b in broadcast_address.to_bytes(8, 'big')
         ]
-        self._api._seq_command(
+        self._api._command(
             'tx_explicit',
             zigpy.types.EUI64(broadcast_as_bytes),
             broadcast_address,

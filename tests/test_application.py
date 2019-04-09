@@ -250,17 +250,17 @@ async def test_broadcast(app):
         0x260, 1, 2, 3, 0x0100, 0x06, 210, b'\x02\x01\x00'
     )
 
-    app._api._seq_command = mock.MagicMock(
+    app._api._command = mock.MagicMock(
         side_effect=asyncio.coroutine(mock.MagicMock())
     )
 
     await app.broadcast(
         profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data)
-    assert app._api._seq_command.call_count == 1
-    assert app._api._seq_command.call_args[0][0] == 'tx_explicit'
-    assert app._api._seq_command.call_args[0][3] == src_ep
-    assert app._api._seq_command.call_args[0][4] == dst_ep
-    assert app._api._seq_command.call_args[0][9] == data
+    assert app._api._command.call_count == 1
+    assert app._api._command.call_args[0][0] == 'tx_explicit'
+    assert app._api._command.call_args[0][3] == src_ep
+    assert app._api._command.call_args[0][4] == dst_ep
+    assert app._api._command.call_args[0][9] == data
 
 
 @pytest.mark.asyncio
@@ -440,13 +440,13 @@ async def _test_request(app, do_reply=True, expect_reply=True, **kwargs):
     ieee = EUI64(b'\x01\x02\x03\x04\x05\x06\x07\x08')
     app.add_device(ieee, nwk)
 
-    def _mock_seq_command(cmdname, ieee, nwk, src_ep, dst_ep, cluster,
-                          profile, radius, options, data):
+    def _mock_command(cmdname, ieee, nwk, src_ep, dst_ep, cluster,
+                      profile, radius, options, data):
         if expect_reply:
             if do_reply:
                 app._pending[seq].set_result(mock.sentinel.reply_result)
 
-    app._api._seq_command = mock.MagicMock(side_effect=_mock_seq_command)
+    app._api._command = mock.MagicMock(side_effect=_mock_command)
     return await app.request(nwk, 0x0260, 1, 2, 3, seq, [4, 5, 6], expect_reply=expect_reply, **kwargs)
 
 

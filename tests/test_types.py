@@ -62,6 +62,9 @@ def test_undefined_enum_undefined_value():
     i = undEnum(0xEE)
     assert i.name == 'UNDEFINED_VALUE'
 
+    i = undEnum()
+    assert i is undEnum.OK
+
 
 def test_undefined_enum_undefinede():
     class undEnum(t.uint8_t, t.UndefinedEnum):

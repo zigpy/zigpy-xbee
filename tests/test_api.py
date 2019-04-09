@@ -33,8 +33,9 @@ def test_close(api):
 def test_commands():
     import string
     anum = string.ascii_letters + string.digits + '_'
+    commands = {**xbee_api.COMMAND_REQUESTS, **xbee_api.COMMAND_RESPONSES}
 
-    for cmd_name, cmd_opts in xbee_api.COMMANDS.items():
+    for cmd_name, cmd_opts in commands.items():
         assert isinstance(cmd_name, str) is True
         assert all([c in anum for c in cmd_name]), cmd_name
         assert len(cmd_opts) == 3
@@ -47,12 +48,12 @@ def test_commands():
 @pytest.mark.asyncio
 async def test_command(api):
     def mock_api_frame(name, *args):
-        c = xbee_api.COMMANDS[name]
+        c = xbee_api.COMMAND_REQUESTS[name]
         return mock.sentinel.api_frame_data, c[2]
     api._api_frame = mock.MagicMock(side_effect=mock_api_frame)
     api._uart.send = mock.MagicMock()
 
-    for cmd_name, cmd_opts in xbee_api.COMMANDS.items():
+    for cmd_name, cmd_opts in xbee_api.COMMAND_REQUESTS.items():
         cmd_id, schema, expect_reply = cmd_opts
         ret = api._command(cmd_name, mock.sentinel.cmd_data)
         if expect_reply:
@@ -62,28 +63,30 @@ async def test_command(api):
             assert ret is None
         assert api._api_frame.call_count == 1
         assert api._api_frame.call_args[0][0] == cmd_name
-        assert api._api_frame.call_args[0][1] == mock.sentinel.cmd_data
+        assert api._api_frame.call_args[0][1] == api._seq - 1
+        assert api._api_frame.call_args[0][2] == mock.sentinel.cmd_data
+        assert api._uart.send.call_count == 1
+        assert api._uart.send.call_args[0][0] == mock.sentinel.api_frame_data
+        api._api_frame.reset_mock()
+        api._uart.send.reset_mock()
+
+        ret = api._command(cmd_name, mock.sentinel.cmd_data, mask_frame_id=True)
+        assert ret is None
+        assert api._api_frame.call_count == 1
+        assert api._api_frame.call_args[0][0] == cmd_name
+        assert api._api_frame.call_args[0][1] == 0
+        assert api._api_frame.call_args[0][2] == mock.sentinel.cmd_data
         assert api._uart.send.call_count == 1
         assert api._uart.send.call_args[0][0] == mock.sentinel.api_frame_data
         api._api_frame.reset_mock()
         api._uart.send.reset_mock()
 
 
-def test_seq_command(api):
-    api._command = mock.MagicMock()
-    api._seq = mock.sentinel.seq
-    api._seq_command(mock.sentinel.cmd_name, mock.sentinel.args)
-    assert api._command.call_count == 1
-    assert api._command.call_args[0][0] == mock.sentinel.cmd_name
-    assert api._command.call_args[0][1] == mock.sentinel.seq
-    assert api._command.call_args[0][2] == mock.sentinel.args
-
-
 async def _test_at_or_queued_at_command(api, cmd, monkeypatch, do_reply=True):
     monkeypatch.setattr(t, 'serialize', mock.MagicMock(return_value=mock.sentinel.serialize))
 
     def mock_command(name, *args):
-        rsp = xbee_api.COMMANDS[name][2]
+        rsp = xbee_api.COMMAND_REQUESTS[name][2]
         ret = None
         if rsp:
             ret = asyncio.Future()
@@ -99,9 +102,8 @@ async def _test_at_or_queued_at_command(api, cmd, monkeypatch, do_reply=True):
         assert t.serialize.call_count == 1
         assert api._command.call_count == 1
         assert api._command.call_args[0][0] in ('at', 'queued_at')
-        assert api._command.call_args[0][1] == mock.sentinel.seq
-        assert api._command.call_args[0][2] == at_cmd.encode('ascii')
-        assert api._command.call_args[0][3] == mock.sentinel.serialize
+        assert api._command.call_args[0][1] == at_cmd.encode('ascii')
+        assert api._command.call_args[0][2] == mock.sentinel.serialize
         assert res == mock.sentinel.at_result
         t.serialize.reset_mock()
         api._command.reset_mock()
@@ -129,7 +131,7 @@ async def _test_remote_at_command(api, monkeypatch, do_reply=True):
     monkeypatch.setattr(t, 'serialize', mock.MagicMock(return_value=mock.sentinel.serialize))
 
     def mock_command(name, *args):
-        rsp = xbee_api.COMMANDS[name][2]
+        rsp = xbee_api.COMMAND_REQUESTS[name][2]
         ret = None
         if rsp:
             ret = asyncio.Future()
@@ -147,12 +149,11 @@ async def _test_remote_at_command(api, monkeypatch, do_reply=True):
         assert t.serialize.call_count == 1
         assert api._command.call_count == 1
         assert api._command.call_args[0][0] == 'remote_at'
-        assert api._command.call_args[0][1] == mock.sentinel.seq
-        assert api._command.call_args[0][2] == mock.sentinel.ieee
-        assert api._command.call_args[0][3] == mock.sentinel.nwk
-        assert api._command.call_args[0][4] == mock.sentinel.opts
-        assert api._command.call_args[0][5] == at_cmd.encode('ascii')
-        assert api._command.call_args[0][6] == mock.sentinel.serialize
+        assert api._command.call_args[0][1] == mock.sentinel.ieee
+        assert api._command.call_args[0][2] == mock.sentinel.nwk
+        assert api._command.call_args[0][3] == mock.sentinel.opts
+        assert api._command.call_args[0][4] == at_cmd.encode('ascii')
+        assert api._command.call_args[0][5] == mock.sentinel.serialize
         assert res == mock.sentinel.at_result
         t.serialize.reset_mock()
         api._command.reset_mock()
@@ -172,7 +173,7 @@ async def test_remote_at_cmd_no_rsp(api, monkeypatch):
 
 def test_api_frame(api):
     ieee = t.EUI64([t.uint8_t(a) for a in range(0, 8)])
-    for cmd_name, cmd_opts in xbee_api.COMMANDS.items():
+    for cmd_name, cmd_opts in xbee_api.COMMAND_REQUESTS.items():
         cmd_id, schema, repl = cmd_opts
         if schema:
             args = [ieee if isinstance(a(), t.EUI64) else a() for a in schema]
@@ -186,7 +187,7 @@ def test_frame_received(api, monkeypatch):
         return_value=(mock.sentinel.deserialize_data, b'')))
     my_handler = mock.MagicMock()
 
-    for cmd, cmd_opts in xbee_api.COMMANDS.items():
+    for cmd, cmd_opts in xbee_api.COMMAND_RESPONSES.items():
         cmd_id = cmd_opts[0]
         payload = b'\x01\x02\x03\x04'
         data = cmd_id.to_bytes(1, 'big') + payload
@@ -206,10 +207,10 @@ def test_frame_received_no_handler(api, monkeypatch):
     my_handler = mock.MagicMock()
     cmd = 'no_handler'
     cmd_id = 0x00
-    xbee_api.COMMANDS[cmd] = (cmd_id, (), None)
+    xbee_api.COMMAND_RESPONSES[cmd] = (cmd_id, (), None)
     api._commands_by_id[cmd_id] = cmd
 
-    cmd_opts = xbee_api.COMMANDS[cmd]
+    cmd_opts = xbee_api.COMMAND_RESPONSES[cmd]
     cmd_id = cmd_opts[0]
     payload = b'\x01\x02\x03\x04'
     data = cmd_id.to_bytes(1, 'big') + payload
