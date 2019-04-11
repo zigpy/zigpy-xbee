@@ -325,9 +325,51 @@ def test_handle_explicit_rx_indicator(api):
     assert api._app.handle_rx.call_count == 1
 
 
-def test_handle_tx_status(api):
+def _handle_tx_status(api, status, wrong_frame_id=False):
+    status = t.TXStatus(status)
+    frame_id = 0x12
+    send_fut = mock.MagicMock(spec=asyncio.Future)
+    api._awaiting[frame_id] = (send_fut, )
     s = mock.sentinel
-    api._handle_tx_status(s.frame_id, s.dst_nwk, s.retries, s.status, s.disc)
+    if wrong_frame_id:
+        frame_id += 1
+    api._handle_tx_status(frame_id, s.dst_nwk, s.retries, status,
+                          t.DiscoveryStatus())
+    return send_fut
+
+
+def test_handle_tx_status_success(api):
+    fut = _handle_tx_status(api, t.TXStatus.SUCCESS)
+    assert len(api._awaiting) == 0
+    assert fut.set_result.call_count == 1
+    assert fut.set_exception.call_count == 0
+
+
+def test_handle_tx_status_except(api):
+    fut = _handle_tx_status(api, t.TXStatus.ADDRESS_NOT_FOUND)
+    assert len(api._awaiting) == 0
+    assert fut.set_result.call_count == 0
+    assert fut.set_exception.call_count == 1
+
+
+def test_handle_tx_status_unexpected(api):
+    fut = _handle_tx_status(api, 1, wrong_frame_id=True)
+    assert len(api._awaiting) == 1
+    assert fut.set_result.call_count == 0
+    assert fut.set_exception.call_count == 0
+
+
+def test_handle_tx_status_duplicate(api):
+    status = t.TXStatus.SUCCESS
+    frame_id = 0x12
+    send_fut = mock.MagicMock(spec=asyncio.Future)
+    send_fut.set_result.side_effect = asyncio.InvalidStateError
+    api._awaiting[frame_id] = (send_fut, )
+    s = mock.sentinel
+    api._handle_tx_status(frame_id, s.dst_nwk, s.retries, status, s.disc)
+    assert len(api._awaiting) == 0
+    assert send_fut.set_result.call_count == 1
+    assert send_fut.set_exception.call_count == 0
 
 
 @pytest.mark.asyncio

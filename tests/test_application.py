@@ -3,14 +3,17 @@ from unittest import mock
 
 import pytest
 
+from zigpy.exceptions import DeliveryError
 from zigpy.types import EUI64, uint16_t
 from zigpy_xbee.api import ModemStatus, XBee
-from zigpy_xbee.zigbee.application import ControllerApplication
+from zigpy_xbee.zigbee import application
 
 
 @pytest.fixture
-def app(database_file=None):
-    return ControllerApplication(XBee(), database_file=database_file)
+def app(monkeypatch, database_file=None):
+    monkeypatch.setattr(application, 'TIMEOUT_TX_STATUS', 0.1)
+    return application.ControllerApplication(XBee(),
+                                             database_file=database_file)
 
 
 def test_modem_status(app):
@@ -293,7 +296,7 @@ async def test_form_network(app):
     app._api._queued_at = mock.MagicMock(spec=XBee._at_command,
                                          side_effect=mock_at_command)
     app._get_association_state = mock.MagicMock(
-        spec=ControllerApplication._get_association_state,
+        spec=application.ControllerApplication._get_association_state,
         side_effect=asyncio.coroutine(mock.MagicMock(return_value=0x00))
     )
 
@@ -434,7 +437,8 @@ async def test_permit(app):
     assert app._api._at_command.call_args_list[0][0][1] == time_s
 
 
-async def _test_request(app, do_reply=True, expect_reply=True, **kwargs):
+async def _test_request(app, do_reply=True, expect_reply=True,
+                        send_success=True, send_timeout=False, **kwargs):
     seq = 123
     nwk = 0x2345
     ieee = EUI64(b'\x01\x02\x03\x04\x05\x06\x07\x08')
@@ -442,9 +446,17 @@ async def _test_request(app, do_reply=True, expect_reply=True, **kwargs):
 
     def _mock_command(cmdname, ieee, nwk, src_ep, dst_ep, cluster,
                       profile, radius, options, data):
+        send_fut = asyncio.Future()
+        if not send_timeout:
+            if send_success:
+                send_fut.set_result(True)
+            else:
+                send_fut.set_exception(DeliveryError())
+
         if expect_reply:
             if do_reply:
                 app._pending[seq].set_result(mock.sentinel.reply_result)
+        return send_fut
 
     app._api._command = mock.MagicMock(side_effect=_mock_command)
     return await app.request(nwk, 0x0260, 1, 2, 3, seq, [4, 5, 6], expect_reply=expect_reply, **kwargs)
@@ -457,13 +469,25 @@ async def test_request_with_reply(app):
 
 @pytest.mark.asyncio
 async def test_request_expect_no_reply(app):
-    assert await _test_request(app, False, False, tries=2, timeout=0.1) is None
+    assert await _test_request(app, False, False, tries=2, timeout=0.1) is True
 
 
 @pytest.mark.asyncio
 async def test_request_no_reply(app):
-    with pytest.raises(asyncio.TimeoutError):
+    with pytest.raises(DeliveryError):
         await _test_request(app, False, True, tries=2, timeout=0.1)
+
+
+@pytest.mark.asyncio
+async def test_request_send_timeout(app):
+    with pytest.raises(DeliveryError):
+        await _test_request(app, False, True, send_timeout=True, tries=2, timeout=0.1)
+
+
+@pytest.mark.asyncio
+async def test_request_send_fail(app):
+    with pytest.raises(DeliveryError):
+        await _test_request(app, False, True, send_success=False, tries=2, timeout=0.1)
 
 
 def _handle_reply(app, tsn):
