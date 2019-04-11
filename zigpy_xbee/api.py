@@ -30,7 +30,7 @@ class ModemStatus(t.uint8_t, t.UndefinedEnum):
 
 
 # https://www.digi.com/resources/documentation/digidocs/PDFs/90000976.pdf
-COMMANDS = {
+COMMAND_REQUESTS = {
     'at': (0x08, (t.FrameId, t.ATCommand, t.Bytes), 0x88),
     'queued_at': (0x09, (t.FrameId, t.ATCommand, t.Bytes), 0x88),
     'remote_at': (0x17, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.ATCommand, t.Bytes), 0x97),
@@ -38,7 +38,8 @@ COMMANDS = {
     'tx_explicit': (0x11, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), None),
     'create_source_route': (0x21, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)), None),
     'register_joining_device': (0x24, (), None),
-
+}
+COMMAND_RESPONSES = {
     'at_response': (0x88, (t.FrameId, t.ATCommand, t.uint8_t, t.Bytes), None),
     'modem_status': (0x8A, (ModemStatus, ), None),
     'tx_status': (0x8B, (t.FrameId, t.NWK, t.uint8_t, t.uint8_t, t.uint8_t), None),
@@ -192,7 +193,7 @@ class XBee:
     def __init__(self):
         self._uart = None
         self._seq = 1
-        self._commands_by_id = {v[0]: k for k, v in COMMANDS.items()}
+        self._commands_by_id = {v[0]: k for k, v in COMMAND_RESPONSES.items()}
         self._awaiting = {}
         self._app = None
         self._cmd_mode_future = None
@@ -221,27 +222,24 @@ class XBee:
     def close(self):
         return self._uart.close()
 
-    def _command(self, name, *args):
+    def _command(self, name, *args, mask_frame_id=False):
         LOGGER.debug("Command %s %s", name, args)
-        data, needs_response = self._api_frame(name, *args)
+        frame_id = 0 if mask_frame_id else self._seq
+        data, needs_response = self._api_frame(name, frame_id, *args)
         self._uart.send(data)
         future = None
-        if needs_response:
+        if needs_response and frame_id:
             future = asyncio.Future()
-            self._awaiting[self._seq] = (future, )
+            self._awaiting[frame_id] = (future, )
         self._seq = (self._seq % 255) + 1
         return future
-
-    def _seq_command(self, name, *args):
-        LOGGER.debug("Sequenced command: %s %s", name, args)
-        return self._command(name, self._seq, *args)
 
     async def _remote_at_command(self, ieee, nwk, options, name, *args):
         LOGGER.debug("Remote AT command: %s %s", name, args)
         data = t.serialize(args, (AT_COMMANDS[name], ))
         try:
             return await asyncio.wait_for(
-                self._command('remote_at', self._seq, ieee, nwk, options,
+                self._command('remote_at', ieee, nwk, options,
                               name.encode('ascii'), data,),
                 timeout=REMOTE_AT_COMMAND_TIMEOUT)
         except asyncio.TimeoutError:
@@ -253,7 +251,7 @@ class XBee:
         data = t.serialize(args, (AT_COMMANDS[name], ))
         try:
             return await asyncio.wait_for(
-                self._command(cmd_type, self._seq, name.encode('ascii'), data),
+                self._command(cmd_type, name.encode('ascii'), data),
                 timeout=AT_COMMAND_TIMEOUT)
         except asyncio.TimeoutError:
             LOGGER.warning("%s: No response to %s command", cmd_type, name)
@@ -263,13 +261,13 @@ class XBee:
     _queued_at = functools.partialmethod(_at_partial, 'queued_at')
 
     def _api_frame(self, name, *args):
-        c = COMMANDS[name]
+        c = COMMAND_REQUESTS[name]
         return (bytes([c[0]]) + t.serialize(args, c[1])), c[2]
 
     def frame_received(self, data):
         command = self._commands_by_id[data[0]]
         LOGGER.debug("Frame received: %s", command)
-        data, rest = t.deserialize(data[1:], COMMANDS[command][1])
+        data, rest = t.deserialize(data[1:], COMMAND_RESPONSES[command][1])
         try:
             getattr(self, '_handle_%s' % (command, ))(data)
         except AttributeError:
@@ -401,3 +399,8 @@ class XBee:
         LOGGER.debug(("Couldn't enter AT command mode at any known baudrate."
                       "Configure XBee manually for escaped API mode ATAP2"))
         return False
+
+    def __getattr__(self, item):
+        if item in COMMAND_REQUESTS:
+            return functools.partial(self._command, item)
+        raise AttributeError("Unknown command {}".format(item))
