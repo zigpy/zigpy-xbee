@@ -4,6 +4,7 @@ import enum
 import functools
 import logging
 
+from zigpy.exceptions import DeliveryError
 from zigpy.types import LVList
 
 from . import uart
@@ -35,14 +36,14 @@ COMMAND_REQUESTS = {
     'queued_at': (0x09, (t.FrameId, t.ATCommand, t.Bytes), 0x88),
     'remote_at': (0x17, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.ATCommand, t.Bytes), 0x97),
     'tx': (0x10, (), None),
-    'tx_explicit': (0x11, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), None),
+    'tx_explicit': (0x11, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.uint8_t, t.Bytes), 0x8b),
     'create_source_route': (0x21, (t.FrameId, t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)), None),
     'register_joining_device': (0x24, (), None),
 }
 COMMAND_RESPONSES = {
     'at_response': (0x88, (t.FrameId, t.ATCommand, t.uint8_t, t.Bytes), None),
     'modem_status': (0x8A, (ModemStatus, ), None),
-    'tx_status': (0x8B, (t.FrameId, t.NWK, t.uint8_t, t.uint8_t, t.uint8_t), None),
+    'tx_status': (0x8B, (t.FrameId, t.NWK, t.uint8_t, t.TXStatus, t.DiscoveryStatus), None),
     'route_information': (0x8D, (), None),
     'rx': (0x90, (), None),
     'explicit_rx_indicator': (0x91, (t.EUI64, t.NWK, t.uint8_t, t.uint8_t, t.uint16_t, t.uint16_t, t.uint8_t, t.Bytes), None),
@@ -269,15 +270,15 @@ class XBee:
         LOGGER.debug("Frame received: %s", command)
         data, rest = t.deserialize(data[1:], COMMAND_RESPONSES[command][1])
         try:
-            getattr(self, '_handle_%s' % (command, ))(data)
+            getattr(self, '_handle_%s' % (command, ))(*data)
         except AttributeError:
             LOGGER.error("No '%s' handler. Data: %s", command,
                          binascii.hexlify(data))
 
-    def _handle_at_response(self, data):
-        fut, = self._awaiting.pop(data[0])
+    def _handle_at_response(self, frame_id, cmd, status, value):
+        fut, = self._awaiting.pop(frame_id)
         try:
-            status = ATCommandResult(data[2])
+            status = ATCommandResult(status)
         except ValueError:
             status = ATCommandResult.ERROR
 
@@ -286,25 +287,26 @@ class XBee:
                 RuntimeError("AT Command response: {}".format(status.name)))
             return
 
-        response_type = AT_COMMANDS[data[1].decode('ascii')]
-        if response_type is None or len(data[3]) == 0:
+        response_type = AT_COMMANDS[cmd.decode('ascii')]
+        if response_type is None or len(value) == 0:
             fut.set_result(None)
             return
 
-        response, remains = response_type.deserialize(data[3])
+        response, remains = response_type.deserialize(value)
         fut.set_result(response)
 
-    def _handle_remote_at_response(self, data):
+    def _handle_remote_at_response(self, frame_id, ieee, nwk, cmd, status, value):
         """Remote AT command response."""
-        LOGGER.debug("Remote AT command response: %s", data)
-        return self._handle_at_response((data[0], data[3], data[4], data[5]))
+        LOGGER.debug("Remote AT command response from: %s",
+                     (frame_id, ieee, nwk, cmd, status, value))
+        return self._handle_at_response(frame_id, cmd, status, value)
 
-    def _handle_many_to_one_rri(self, data):
-        LOGGER.debug("_handle_many_to_one_rri: %s", data)
+    def _handle_many_to_one_rri(self, ieee, nwk, reserved):
+        LOGGER.debug("_handle_many_to_one_rri: %s", (ieee, nwk, reserved))
 
-    def _handle_modem_status(self, data):
-        LOGGER.debug("Handle modem status frame: %s", data)
-        status = data[0]
+    def _handle_modem_status(self, status):
+        LOGGER.debug("Handle modem status frame: %s", status)
+        status = status
         if status == ModemStatus.COORDINATOR_STARTED:
             self.coordinator_started_event.set()
         elif status in (ModemStatus.HARDWARE_RESET, ModemStatus.WATCHDOG_TIMER_RESET):
@@ -316,16 +318,38 @@ class XBee:
         if self._app:
             self._app.handle_modem_status(status)
 
-    def _handle_explicit_rx_indicator(self, data):
-        LOGGER.debug("_handle_explicit_rx: opts=%s", data[6])
-        self._app.handle_rx(*data)
+    def _handle_explicit_rx_indicator(self, ieee, nwk, src_ep,
+                                      dst_ep, cluster, profile, rx_opts, data):
+        LOGGER.debug("_handle_explicit_rx: %s",
+                     (ieee, nwk, dst_ep, cluster, rx_opts,
+                      binascii.hexlify(data)))
+        self._app.handle_rx(ieee, nwk, src_ep, dst_ep, cluster,
+                            profile, rx_opts, data)
 
-    def _handle_route_record_indicator(self, data):
+    def _handle_route_record_indicator(self, ieee, src, rx_opts, hops):
         """Handle Route Record indicator from a device."""
-        LOGGER.debug("_handle_route_record_indicator: %s", data)
+        LOGGER.debug("_handle_route_record_indicator: %s",
+                     (ieee, src, rx_opts, hops))
 
-    def _handle_tx_status(self, data):
-        LOGGER.debug("tx_status: %s", data)
+    def _handle_tx_status(self, frame_id, nwk, tries, tx_status, dsc_status):
+        LOGGER.debug(
+            ("tx_explicit to 0x%04x: %s after %i tries. Discovery Status: %s,"
+             " Frame #%i"), nwk, tx_status, tries, dsc_status, frame_id)
+        try:
+            fut, = self._awaiting.pop(frame_id)
+        except KeyError:
+            LOGGER.debug("unexpected tx_status report received")
+            return
+
+        try:
+            if tx_status in (t.TXStatus.SUCCESS,
+                             t.TXStatus.BROADCAST_APS_TX_ATTEMPT):
+                fut.set_result(tx_status)
+            else:
+                fut.set_exception(
+                    DeliveryError('%s' % (tx_status, )))
+        except asyncio.InvalidStateError as ex:
+            LOGGER.debug("duplicate tx_status for %s nwk? State: %s", nwk, ex)
 
     def set_application(self, app):
         self._app = app

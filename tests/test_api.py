@@ -176,7 +176,7 @@ def test_api_frame(api):
     for cmd_name, cmd_opts in xbee_api.COMMAND_REQUESTS.items():
         cmd_id, schema, repl = cmd_opts
         if schema:
-            args = [ieee if isinstance(a(), t.EUI64) else a() for a in schema]
+            args = [ieee if issubclass(a, t.EUI64) else a() for a in schema]
             frame, repl = api._api_frame(cmd_name, *args)
         else:
             frame, repl = api._api_frame(cmd_name)
@@ -184,7 +184,19 @@ def test_api_frame(api):
 
 def test_frame_received(api, monkeypatch):
     monkeypatch.setattr(t, 'deserialize', mock.MagicMock(
-        return_value=(mock.sentinel.deserialize_data, b'')))
+        return_value=(
+            [
+                mock.sentinel.arg_0,
+                mock.sentinel.arg_1,
+                mock.sentinel.arg_2,
+                mock.sentinel.arg_3,
+                mock.sentinel.arg_4,
+                mock.sentinel.arg_5,
+                mock.sentinel.arg_6,
+                mock.sentinel.arg_7,
+                mock.sentinel.arg_8,
+            ], b'')
+    ))
     my_handler = mock.MagicMock()
 
     for cmd, cmd_opts in xbee_api.COMMAND_RESPONSES.items():
@@ -196,7 +208,10 @@ def test_frame_received(api, monkeypatch):
         assert t.deserialize.call_count == 1
         assert t.deserialize.call_args[0][0] == payload
         assert my_handler.call_count == 1
-        assert my_handler.call_args[0][0] == mock.sentinel.deserialize_data
+        assert my_handler.call_args[0][0] == mock.sentinel.arg_0
+        assert my_handler.call_args[0][1] == mock.sentinel.arg_1
+        assert my_handler.call_args[0][2] == mock.sentinel.arg_2
+        assert my_handler.call_args[0][3] == mock.sentinel.arg_3
         t.deserialize.reset_mock()
         my_handler.reset_mock()
 
@@ -224,7 +239,7 @@ def _handle_at_response(api, tsn, status, at_response=b''):
     data = (tsn, 'AI'.encode('ascii'), status, at_response)
     response = asyncio.Future()
     api._awaiting[tsn] = (response, )
-    api._handle_at_response(data)
+    api._handle_at_response(*data)
     return response
 
 
@@ -264,18 +279,18 @@ def test_handle_at_response_undef_error(api):
 def test_handle_remote_at_rsp(api):
     api._handle_at_response = mock.MagicMock()
     s = mock.sentinel
-    api._handle_remote_at_response([s.frame_id, s.ieee, s.nwk, s.cmd,
-                                    s.status, s.data])
+    api._handle_remote_at_response(s.frame_id, s.ieee, s.nwk, s.cmd,
+                                   s.status, s.data)
     assert api._handle_at_response.call_count == 1
-    assert api._handle_at_response.call_args[0][0][0] == s.frame_id
-    assert api._handle_at_response.call_args[0][0][1] == s.cmd
-    assert api._handle_at_response.call_args[0][0][2] == s.status
-    assert api._handle_at_response.call_args[0][0][3] == s.data
+    assert api._handle_at_response.call_args[0][0] == s.frame_id
+    assert api._handle_at_response.call_args[0][1] == s.cmd
+    assert api._handle_at_response.call_args[0][2] == s.status
+    assert api._handle_at_response.call_args[0][3] == s.data
 
 
 def _send_modem_event(api, event):
     api._app = mock.MagicMock(spec=ControllerApplication)
-    api._handle_modem_status([event])
+    api._handle_modem_status(event)
     assert api._app.handle_modem_status.call_count == 1
     assert api._app.handle_modem_status.call_args[0][0] == event
 
@@ -301,15 +316,60 @@ def test_handle_modem_status(api):
 
 
 def test_handle_explicit_rx_indicator(api):
-    data = b'\x00\x01\x02\x03\x04\x05\x06\x07'
+    s = mock.sentinel
+    data = [s.src_ieee, s.src_nwk, s.src_ep, s.dst_ep, s.cluster_id, s.profile,
+            s.opts, b'abcdef']
     api._app = mock.MagicMock()
     api._app.handle_rx = mock.MagicMock()
-    api._handle_explicit_rx_indicator(data)
+    api._handle_explicit_rx_indicator(*data)
     assert api._app.handle_rx.call_count == 1
 
 
-def test_handle_tx_status(api):
-    api._handle_tx_status(b'\x01\x02\x03\x04')
+def _handle_tx_status(api, status, wrong_frame_id=False):
+    status = t.TXStatus(status)
+    frame_id = 0x12
+    send_fut = mock.MagicMock(spec=asyncio.Future)
+    api._awaiting[frame_id] = (send_fut, )
+    s = mock.sentinel
+    if wrong_frame_id:
+        frame_id += 1
+    api._handle_tx_status(frame_id, s.dst_nwk, s.retries, status,
+                          t.DiscoveryStatus())
+    return send_fut
+
+
+def test_handle_tx_status_success(api):
+    fut = _handle_tx_status(api, t.TXStatus.SUCCESS)
+    assert len(api._awaiting) == 0
+    assert fut.set_result.call_count == 1
+    assert fut.set_exception.call_count == 0
+
+
+def test_handle_tx_status_except(api):
+    fut = _handle_tx_status(api, t.TXStatus.ADDRESS_NOT_FOUND)
+    assert len(api._awaiting) == 0
+    assert fut.set_result.call_count == 0
+    assert fut.set_exception.call_count == 1
+
+
+def test_handle_tx_status_unexpected(api):
+    fut = _handle_tx_status(api, 1, wrong_frame_id=True)
+    assert len(api._awaiting) == 1
+    assert fut.set_result.call_count == 0
+    assert fut.set_exception.call_count == 0
+
+
+def test_handle_tx_status_duplicate(api):
+    status = t.TXStatus.SUCCESS
+    frame_id = 0x12
+    send_fut = mock.MagicMock(spec=asyncio.Future)
+    send_fut.set_result.side_effect = asyncio.InvalidStateError
+    api._awaiting[frame_id] = (send_fut, )
+    s = mock.sentinel
+    api._handle_tx_status(frame_id, s.dst_nwk, s.retries, status, s.disc)
+    assert len(api._awaiting) == 0
+    assert send_fut.set_result.call_count == 1
+    assert send_fut.set_exception.call_count == 0
 
 
 @pytest.mark.asyncio
@@ -422,10 +482,11 @@ def test_set_application(api):
 
 
 def test_handle_route_record_indicator(api):
-    api._handle_route_record_indicator(mock.sentinel.ri)
+    s = mock.sentinel
+    api._handle_route_record_indicator(s.ieee, s.src, s.rx_opts, s.hops)
 
 
 def test_handle_many_to_one_rri(api):
     ieee = t.EUI64([t.uint8_t(a) for a in range(0, 8)])
     nwk = 0x1234
-    api._handle_many_to_one_rri([ieee, nwk, 0])
+    api._handle_many_to_one_rri(ieee, nwk, 0)
