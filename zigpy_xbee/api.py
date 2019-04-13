@@ -342,8 +342,9 @@ class XBee:
             return
 
         try:
-            if tx_status in (t.TXStatus.SUCCESS,
-                             t.TXStatus.BROADCAST_APS_TX_ATTEMPT):
+            if tx_status in (t.TXStatus.BROADCAST_APS_TX_ATTEMPT,
+                             t.TXStatus.SELF_ADDRESSED,
+                             t.TXStatus.SUCCESS):
                 fut.set_result(tx_status)
             else:
                 fut.set_exception(
