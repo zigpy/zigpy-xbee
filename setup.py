@@ -2,9 +2,11 @@
 
 from setuptools import find_packages, setup
 
+import zigpy_xbee.const as xbee_const
+
 setup(
     name="zigpy-xbee-homeassistant",
-    version="0.1.3",
+    version=xbee_const.__version__,
     description="A library which communicates with XBee radios for zigpy",
     url="http://github.com/zigpy/zigpy-xbee",
     author="Russell Cloran",

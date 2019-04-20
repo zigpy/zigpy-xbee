@@ -3,14 +3,20 @@ import binascii
 import logging
 
 import zigpy.application
+import zigpy.exceptions
 import zigpy.types
 import zigpy.util
+import zigpy.zdo.types
+
+from zigpy_xbee.types import UNKNOWN_IEEE
 
 
 # how long coordinator would hold message for an end device in 10ms units
 CONF_CYCLIC_SLEEP_PERIOD = 0x0300
 # end device poll timeout = 3 * SN * SP * 10ms
 CONF_POLL_TIMEOUT = 0x029b
+TIMEOUT_TX_STATUS = 120
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -72,6 +78,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             LOGGER.debug("Coordinator %s", 'enabled' if ce else 'disabled')
         except RuntimeError as exc:
             LOGGER.debug("sending CE command: %s", exc)
+        self.add_device(self.ieee, self.nwk)
 
     async def force_remove(self, dev):
         """Forcibly remove device from NCP."""
@@ -120,8 +127,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self._pending[sequence] = reply_fut
 
         dev = self.get_device(nwk=nwk)
-        self._api._seq_command(
-            'tx_explicit',
+        send_req = self._api.tx_explicit(
             dev.ieee,
             nwk,
             src_ep,
@@ -132,14 +138,41 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             0x20,
             data,
         )
-        if not expect_reply:
-            return
 
         try:
-            return await asyncio.wait_for(reply_fut, timeout)
-        except asyncio.TimeoutError:
+            v = await asyncio.wait_for(send_req, timeout=TIMEOUT_TX_STATUS)
+        except (asyncio.TimeoutError, zigpy.exceptions.DeliveryError) as ex:
+            LOGGER.debug(
+                "[0x%04x:%s:0x%04x]: Error sending message: %s",
+                nwk, dst_ep, cluster, ex)
             self._pending.pop(sequence, None)
-            raise
+            raise zigpy.exceptions.DeliveryError(
+                "[0x{:04x}:{}:0x{:04x}]: Delivery Error".format(nwk, dst_ep,
+                                                                cluster))
+        if expect_reply:
+            try:
+                return await asyncio.wait_for(reply_fut, timeout)
+            except asyncio.TimeoutError as ex:
+                LOGGER.debug("[0x%04x:%s:0x%04x]: no reply: %s",
+                             nwk, dst_ep, cluster, ex)
+                raise zigpy.exceptions.DeliveryError(
+                    "[0x{:04x}:{}:{:04x}]: no reply".format(nwk, dst_ep,
+                                                            cluster))
+            finally:
+                self._pending.pop(sequence, None)
+        return v
+
+    @zigpy.util.retryable_request
+    def remote_at_command(self, nwk, cmd_name, *args, apply_changes=True,
+                          encryption=True):
+        LOGGER.debug("Remote AT%s command: %s", cmd_name, args)
+        options = zigpy.types.uint8_t(0)
+        if apply_changes:
+            options |= 0x02
+        if encryption:
+            options |= 0x20
+        dev = self.get_device(nwk=nwk)
+        return self._api._remote_at_command(dev.ieee, nwk, options, cmd_name, *args)
 
     async def permit_ncp(self, time_s=60):
         assert 0 <= time_s <= 254
@@ -174,11 +207,15 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self.handle_join(nwk, ieee, 0)
 
         try:
-            device = self.get_device(ieee=ember_ieee)
+            device = self.get_device(nwk=src_nwk)
         except KeyError:
-            LOGGER.debug("Received frame from unknown device: 0x%04x/%s",
-                         src_nwk, str(ember_ieee))
-            return
+            if ember_ieee != UNKNOWN_IEEE and ember_ieee in self.devices:
+                self.handle_join(src_nwk, ember_ieee, 0)
+                device = self.get_device(ieee=ember_ieee)
+            else:
+                LOGGER.debug("Received frame from unknown device: 0x%04x/%s",
+                             src_nwk, str(ember_ieee))
+                return
 
         if device.status == zigpy.device.Status.NEW and dst_ep != 0:
             # only allow ZDO responses while initializing device
@@ -192,7 +229,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         try:
             tsn, command_id, is_reply, args = self.deserialize(device, src_ep, cluster_id, data)
         except ValueError as e:
-            LOGGER.error("Failed to parse message (%s) on cluster %d, because %s", binascii.hexlify(data), cluster_id, e)
+            LOGGER.error("Failed to parse message (%s) on cluster %s, because %s", binascii.hexlify(data), cluster_id, e)
             return
 
         if is_reply:
@@ -224,8 +261,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         broadcast_as_bytes = [
             zigpy.types.uint8_t(b) for b in broadcast_address.to_bytes(8, 'big')
         ]
-        self._api._seq_command(
-            'tx_explicit',
+        request = self._api.tx_explicit(
             zigpy.types.EUI64(broadcast_as_bytes),
             broadcast_address,
             src_ep,
@@ -236,3 +272,4 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             0x20,
             data,
         )
+        return await asyncio.wait_for(request, timeout=TIMEOUT_TX_STATUS)

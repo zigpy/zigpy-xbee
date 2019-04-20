@@ -22,6 +22,7 @@ class Gateway(asyncio.Protocol):
 
     def send(self, data):
         """Send data, taking care of escaping and framing"""
+        LOGGER.debug("Sending: %s", data)
         checksum = bytes([self._checksum(data)])
         frame = self.START + self._escape(len(data).to_bytes(2, 'big') + data + checksum)
         self._transport.write(frame)
