@@ -6,7 +6,7 @@ import zigpy.application
 import zigpy.exceptions
 import zigpy.types
 import zigpy.util
-import zigpy.zdo.types
+from zigpy.zdo.types import LogicalType
 
 from zigpy_xbee.types import UNKNOWN_IEEE
 
@@ -16,6 +16,8 @@ CONF_CYCLIC_SLEEP_PERIOD = 0x0300
 # end device poll timeout = 3 * SN * SP * 10ms
 CONF_POLL_TIMEOUT = 0x029b
 TIMEOUT_TX_STATUS = 120
+TIMEOUT_REPLY = 5
+TIMEOUT_REPLY_EXTENDED = 28
 
 
 LOGGER = logging.getLogger(__name__)
@@ -119,7 +121,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         return state
 
     @zigpy.util.retryable_request
-    async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence, data, expect_reply=True, timeout=10):
+    async def request(self, nwk, profile, cluster, src_ep, dst_ep, sequence,
+                      data, expect_reply=True, timeout=TIMEOUT_REPLY):
         LOGGER.debug("Zigbee request seq %s", sequence)
         assert sequence not in self._pending
         if expect_reply:
@@ -127,6 +130,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self._pending[sequence] = reply_fut
 
         dev = self.get_device(nwk=nwk)
+        if dev.node_desc.logical_type in (LogicalType.EndDevice, None):
+            tx_opts = 0x60
+            rx_timeout = TIMEOUT_REPLY_EXTENDED
+        else:
+            tx_opts = 0x20
+            rx_timeout = timeout
         send_req = self._api.tx_explicit(
             dev.ieee,
             nwk,
@@ -135,7 +144,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             cluster,
             profile,
             0,
-            0x20,
+            tx_opts,
             data,
         )
 
@@ -151,7 +160,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                                                                 cluster))
         if expect_reply:
             try:
-                return await asyncio.wait_for(reply_fut, timeout)
+                return await asyncio.wait_for(reply_fut, rx_timeout)
             except asyncio.TimeoutError as ex:
                 LOGGER.debug("[0x%04x:%s:0x%04x]: no reply: %s",
                              nwk, dst_ep, cluster, ex)
