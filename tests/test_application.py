@@ -5,6 +5,8 @@ import pytest
 
 from zigpy.exceptions import DeliveryError
 from zigpy.types import EUI64, uint16_t
+from zigpy.zdo.types import LogicalType
+
 from zigpy_xbee.api import ModemStatus, XBee
 from zigpy_xbee.zigbee import application
 
@@ -12,6 +14,8 @@ from zigpy_xbee.zigbee import application
 @pytest.fixture
 def app(monkeypatch, database_file=None):
     monkeypatch.setattr(application, 'TIMEOUT_TX_STATUS', 0.1)
+    monkeypatch.setattr(application, 'TIMEOUT_REPLY', 0.1)
+    monkeypatch.setattr(application, 'TIMEOUT_REPLY_EXTENDED', 0.1)
     return application.ControllerApplication(XBee(),
                                              database_file=database_file)
 
@@ -438,11 +442,14 @@ async def test_permit(app):
 
 
 async def _test_request(app, do_reply=True, expect_reply=True,
-                        send_success=True, send_timeout=False, **kwargs):
+                        send_success=True, send_timeout=False,
+                        logical_type=None, **kwargs):
     seq = 123
     nwk = 0x2345
     ieee = EUI64(b'\x01\x02\x03\x04\x05\x06\x07\x08')
-    app.add_device(ieee, nwk)
+    dev = app.add_device(ieee, nwk)
+    dev.node_desc = mock.MagicMock()
+    dev.node_desc.logical_type = logical_type
 
     def _mock_command(cmdname, ieee, nwk, src_ep, dst_ep, cluster,
                       profile, radius, options, data):
@@ -488,6 +495,27 @@ async def test_request_send_timeout(app):
 async def test_request_send_fail(app):
     with pytest.raises(DeliveryError):
         await _test_request(app, False, True, send_success=False, tries=2, timeout=0.1)
+
+
+@pytest.mark.asyncio
+async def test_request_extended_timeout(app):
+    lt = LogicalType.Router
+    assert await _test_request(app, True, True, logical_type=lt) == mock.sentinel.reply_result
+    assert app._api._command.call_count == 1
+    assert app._api._command.call_args[0][8] & 0x40 == 0x00
+    app._api._command.reset_mock()
+
+    lt = None
+    assert await _test_request(app, True, True, logical_type=lt) == mock.sentinel.reply_result
+    assert app._api._command.call_count == 1
+    assert app._api._command.call_args[0][8] & 0x40 == 0x40
+    app._api._command.reset_mock()
+
+    lt = LogicalType.EndDevice
+    assert await _test_request(app, True, True, logical_type=lt) == mock.sentinel.reply_result
+    assert app._api._command.call_count == 1
+    assert app._api._command.call_args[0][8] & 0x40 == 0x40
+    app._api._command.reset_mock()
 
 
 def _handle_reply(app, tsn):
