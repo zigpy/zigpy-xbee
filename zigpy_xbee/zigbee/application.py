@@ -4,9 +4,12 @@ import logging
 
 import zigpy.application
 import zigpy.exceptions
+import zigpy.device
+import zigpy.quirks
 import zigpy.types
 import zigpy.util
-from zigpy.zdo.types import LogicalType
+from zigpy.zcl.clusters.general import Groups
+from zigpy.zdo.types import LogicalType, NodeDescriptor
 
 from zigpy_xbee.types import UNKNOWN_IEEE
 
@@ -19,8 +22,9 @@ TIMEOUT_TX_STATUS = 120
 TIMEOUT_REPLY = 5
 TIMEOUT_REPLY_EXTENDED = 28
 
-
 LOGGER = logging.getLogger(__name__)
+
+XBEE_ENDPOINT_ID = 0xe6
 
 
 class ControllerApplication(zigpy.application.ControllerApplication):
@@ -80,7 +84,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             LOGGER.debug("Coordinator %s", 'enabled' if ce else 'disabled')
         except RuntimeError as exc:
             LOGGER.debug("sending CE command: %s", exc)
-        self.add_device(self.ieee, self.nwk)
+
+        dev = zigpy.device.Device(self, self.ieee, self.nwk)
+        dev.add_endpoint(XBEE_ENDPOINT_ID)
+        self.listener_event('raw_device_initialized', dev)
+        xbee_dev = XBeeCoordinator(self, self.ieee, self.nwk, dev)
+        self.devices[dev.ieee] = xbee_dev
 
     async def force_remove(self, dev):
         """Forcibly remove device from NCP."""
@@ -196,7 +205,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         if src_nwk == 0:
             # I'm not sure why we've started seeing ZDO requests from ourself.
             # Ignore for now.
-            return
+            LOGGER.info("handle_rx self addressed")
 
         ember_ieee = zigpy.types.EUI64(src_ieee)
         if dst_ep == 0 and cluster_id == 0x13:
@@ -282,3 +291,35 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             data,
         )
         return await asyncio.wait_for(request, timeout=TIMEOUT_TX_STATUS)
+
+
+class XBeeCoordinator(zigpy.quirks.CustomDevice):
+    class XBeeGroup(zigpy.quirks.CustomCluster, Groups):
+        cluster_id = 0x0006
+
+    class XBeeGroupResponse(zigpy.quirks.CustomCluster, Groups):
+        import zigpy.zcl.foundation as f
+
+        cluster_id = 0x8006
+        ep_attribute = 'xbee_groups_response'
+
+        client_commands = {**Groups.client_commands}
+        client_commands[0x0004] = ('remove_all_response', (f.Status, ), True)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.node_desc = NodeDescriptor(0x01, 0x40, 0x8e, 0x101e, 0x52,
+                                        0x00ff, 0x2c00, 0x00ff, 0x00)
+
+    replacement = {
+        'endpoints': {
+            XBEE_ENDPOINT_ID: {
+                'device_type': 0x0050,
+                'manufacturer': 'Digi',
+                'model': 'XBee',
+                'profile_id': 0xc105,
+                'input_clusters': [XBeeGroup, XBeeGroupResponse],
+                'output_clusters': [],
+            }
+        }
+    }
