@@ -210,8 +210,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         ember_ieee = zigpy.types.EUI64(src_ieee)
         if dst_ep == 0 and cluster_id == 0x13:
             # ZDO Device announce request
-            nwk, data = zigpy.types.uint16_t.deserialize(data[1:])
-            ieee, data = zigpy.types.EUI64.deserialize(data)
+            nwk, rest = zigpy.types.NWK.deserialize(data[1:])
+            ieee, rest = zigpy.types.EUI64.deserialize(rest)
             LOGGER.info("New device joined: NWK 0x%04x, IEEE %s", nwk, ieee)
             if ember_ieee != ieee:
                 LOGGER.warning(
