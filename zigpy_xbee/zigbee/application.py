@@ -312,11 +312,11 @@ class XBeeCoordinator(zigpy.quirks.CustomDevice):
                                         0x00ff, 0x2c00, 0x00ff, 0x00)
 
     replacement = {
+        'manufacturer': 'Digi',
+        'model': 'XBee',
         'endpoints': {
             XBEE_ENDPOINT_ID: {
                 'device_type': 0x0050,
-                'manufacturer': 'Digi',
-                'model': 'XBee',
                 'profile_id': 0xc105,
                 'input_clusters': [XBeeGroup, XBeeGroupResponse],
                 'output_clusters': [],
