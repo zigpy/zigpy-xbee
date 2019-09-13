@@ -13,11 +13,10 @@ from zigpy_xbee.zigbee import application
 
 @pytest.fixture
 def app(monkeypatch, database_file=None):
-    monkeypatch.setattr(application, 'TIMEOUT_TX_STATUS', 0.1)
-    monkeypatch.setattr(application, 'TIMEOUT_REPLY', 0.1)
-    monkeypatch.setattr(application, 'TIMEOUT_REPLY_EXTENDED', 0.1)
-    return application.ControllerApplication(XBee(),
-                                             database_file=database_file)
+    monkeypatch.setattr(application, "TIMEOUT_TX_STATUS", 0.1)
+    monkeypatch.setattr(application, "TIMEOUT_REPLY", 0.1)
+    monkeypatch.setattr(application, "TIMEOUT_REPLY_EXTENDED", 0.1)
+    return application.ControllerApplication(XBee(), database_file=database_file)
 
 
 def test_modem_status(app):
@@ -27,15 +26,20 @@ def test_modem_status(app):
     app.handle_modem_status(ModemStatus(0xEE))
 
 
-def _test_rx(app, device, nwk, deserialized,
-             dst_ep=mock.sentinel.dst_ep,
-             cluster_id=mock.sentinel.cluster_id,
-             data=b''):
+def _test_rx(
+    app,
+    device,
+    nwk,
+    deserialized,
+    dst_ep=mock.sentinel.dst_ep,
+    cluster_id=mock.sentinel.cluster_id,
+    data=b"",
+):
     app.get_device = mock.MagicMock(return_value=device)
     app.deserialize = mock.MagicMock(return_value=deserialized)
 
     app.handle_rx(
-        b'\x01\x02\x03\x04\x05\x06\x07\x08',
+        b"\x01\x02\x03\x04\x05\x06\x07\x08",
         nwk,
         mock.sentinel.src_ep,
         dst_ep,
@@ -53,31 +57,33 @@ def test_rx(app):
     app.handle_message = mock.MagicMock()
     _test_rx(app, device, mock.sentinel.src_nwk, (1, 2, False, []))
     assert app.handle_message.call_count == 1
-    assert app.handle_message.call_args == ((
-        device,
-        False,
-        mock.sentinel.profile_id,
-        mock.sentinel.cluster_id,
-        mock.sentinel.src_ep,
-        mock.sentinel.dst_ep,
-        1,
-        2,
-        [],
-    ), )
+    assert app.handle_message.call_args == (
+        (
+            device,
+            False,
+            mock.sentinel.profile_id,
+            mock.sentinel.cluster_id,
+            mock.sentinel.src_ep,
+            mock.sentinel.dst_ep,
+            1,
+            2,
+            [],
+        ),
+    )
 
 
 def test_rx_nwk_0000(app):
     app._handle_reply = mock.MagicMock()
     app.handle_message = mock.MagicMock()
     app.handle_rx(
-        b'\x01\x02\x03\x04\x05\x06\x07\x08',
+        b"\x01\x02\x03\x04\x05\x06\x07\x08",
         0x0000,
         mock.sentinel.src_ep,
         mock.sentinel.dst_ep,
         mock.sentinel.cluster_id,
         mock.sentinel.profile_id,
         mock.sentinel.rxopts,
-        b''
+        b"",
     )
     assert app.handle_message.call_count == 0
     assert app._handle_reply.call_count == 0
@@ -93,14 +99,14 @@ def test_rx_unknown_device(app, device):
     app.get_device = mock.MagicMock(side_effect=[KeyError, dev])
     app.deserialize = mock.MagicMock(side_effect=ValueError)
     app.handle_rx(
-        b'\x01\x02\x03\x04\x05\x06\x07\x08',
+        b"\x01\x02\x03\x04\x05\x06\x07\x08",
         0x3334,
         mock.sentinel.src_ep,
         mock.sentinel.dst_ep,
         mock.sentinel.cluster_id,
         mock.sentinel.profile_id,
         mock.sentinel.rxopts,
-        b''
+        b"",
     )
     assert app.handle_join.call_count == 1
     assert app.get_device.call_count == 2
@@ -116,14 +122,14 @@ def test_rx_unknown_device_iee(app):
     app.get_device = mock.MagicMock(side_effect=KeyError)
     app.deserialize = mock.MagicMock(side_effect=ValueError)
     app.handle_rx(
-        b'\xff\xff\xff\xff\xff\xff\xff\xff',
+        b"\xff\xff\xff\xff\xff\xff\xff\xff",
         0x3334,
         mock.sentinel.src_ep,
         mock.sentinel.dst_ep,
         mock.sentinel.cluster_id,
         mock.sentinel.profile_id,
         mock.sentinel.rxopts,
-        b''
+        b"",
     )
     assert app.handle_join.call_count == 0
     assert app.get_device.call_count == 1
@@ -143,7 +149,7 @@ def test_rx_failed_deserialize(app, caplog):
     app._handle_reply = mock.MagicMock()
     app.handle_message = mock.MagicMock()
     nwk = 0x1234
-    ieee, _ = t.EUI64.deserialize(b'\x01\x02\x03\x04\x05\x06\x07\x08')
+    ieee, _ = t.EUI64.deserialize(b"\x01\x02\x03\x04\x05\x06\x07\x08")
     device = app.add_device(ieee, nwk)
     device.status = DeviceStatus.ENDPOINTS_INIT
     app.get_device = mock.MagicMock(return_value=device)
@@ -157,10 +163,10 @@ def test_rx_failed_deserialize(app, caplog):
         mock.sentinel.cluster_id,
         mock.sentinel.profile_id,
         mock.sentinel.rxopts,
-        b'',
+        b"",
     )
 
-    assert any(record.levelname == 'ERROR' for record in caplog.records)
+    assert any(record.levelname == "ERROR" for record in caplog.records)
 
     assert app._handle_reply.call_count == 0
     assert app.handle_message.call_count == 0
@@ -171,7 +177,7 @@ def device(app):
     def _device(new=False, zdo_init=False, nwk=t.uint16_t(0x1234)):
         from zigpy.device import Device, Status as DeviceStatus
 
-        ieee, _ = t.EUI64.deserialize(b'\x08\x07\x06\x05\x04\x03\x02\x01')
+        ieee, _ = t.EUI64.deserialize(b"\x08\x07\x06\x05\x04\x03\x02\x01")
         dev = Device(app, ieee, nwk)
         if new:
             dev.status = DeviceStatus.NEW
@@ -180,6 +186,7 @@ def device(app):
         else:
             dev.status = DeviceStatus.ENDPOINTS_INIT
         return dev
+
     return _device
 
 
@@ -198,21 +205,21 @@ def _device_join(app, dev, data):
 
 def test_device_join_new(app, device):
     dev = device()
-    data = b'\xee' + dev.nwk.serialize() + dev.ieee.serialize()
+    data = b"\xee" + dev.nwk.serialize() + dev.ieee.serialize()
 
     _device_join(app, dev, data)
 
 
 def test_device_join_inconsistent_nwk(app, device):
     dev = device()
-    data = b'\xee' + b'\x01\x02' + dev.ieee.serialize()
+    data = b"\xee" + b"\x01\x02" + dev.ieee.serialize()
 
     _device_join(app, dev, data)
 
 
 def test_device_join_inconsistent_ieee(app, device):
     dev = device()
-    data = b'\xee' + dev.nwk.serialize() + b'\x01\x02\x03\x04\x05\x06\x07\x08'
+    data = b"\xee" + dev.nwk.serialize() + b"\x01\x02\x03\x04\x05\x06\x07\x08"
 
     _device_join(app, dev, data)
 
@@ -225,14 +232,14 @@ def _device_status_new(app, dev):
     app.deserialize = mock.MagicMock()
 
     app.handle_rx(
-        b'\x01\x02\x03\x04\x05\x06\x07\x08',
+        b"\x01\x02\x03\x04\x05\x06\x07\x08",
         dev.nwk,
         mock.sentinel.src_ep,
         mock.sentinel.dst_ep,
         mock.sentinel.cluster_id,
         mock.sentinel.profile_id,
         mock.sentinel.rxopts,
-        b'',
+        b"",
     )
 
     assert app.deserialize.call_count == 0
@@ -254,17 +261,21 @@ def test_handle_rx_device_status_zdo(app, device):
 @pytest.mark.asyncio
 async def test_broadcast(app):
     (profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data) = (
-        0x260, 1, 2, 3, 0x0100, 0x06, 210, b'\x02\x01\x00'
+        0x260,
+        1,
+        2,
+        3,
+        0x0100,
+        0x06,
+        210,
+        b"\x02\x01\x00",
     )
 
-    app._api._command = mock.MagicMock(
-        side_effect=asyncio.coroutine(mock.MagicMock())
-    )
+    app._api._command = mock.MagicMock(side_effect=asyncio.coroutine(mock.MagicMock()))
 
-    await app.broadcast(
-        profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data)
+    await app.broadcast(profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data)
     assert app._api._command.call_count == 1
-    assert app._api._command.call_args[0][0] == 'tx_explicit'
+    assert app._api._command.call_args[0][0] == "tx_explicit"
     assert app._api._command.call_args[0][3] == src_ep
     assert app._api._command.call_args[0][4] == dst_ep
     assert app._api._command.call_args[0][9] == data
@@ -272,11 +283,11 @@ async def test_broadcast(app):
 
 @pytest.mark.asyncio
 async def test_get_association_state(app):
-    ai_results = (0xff, 0xff, 0xff, 0xff, mock.sentinel.ai)
+    ai_results = (0xFF, 0xFF, 0xFF, 0xFF, mock.sentinel.ai)
     app._api._at_command = mock.MagicMock(
-        spec=XBee._at_command, side_effect=asyncio.coroutine(mock.MagicMock(
-            side_effect=ai_results
-        )))
+        spec=XBee._at_command,
+        side_effect=asyncio.coroutine(mock.MagicMock(side_effect=ai_results)),
+    )
     ai = await app._get_association_state()
     assert app._api._at_command.call_count == len(ai_results)
     assert ai is mock.sentinel.ai
@@ -287,21 +298,23 @@ async def test_form_network(app):
     legacy_module = False
 
     async def mock_at_command(cmd, *args):
-        if cmd == 'MY':
+        if cmd == "MY":
             return 0x0000
-        elif cmd == 'WR':
+        elif cmd == "WR":
             app._api.coordinator_started_event.set()
-        elif cmd == 'CE' and legacy_module:
+        elif cmd == "CE" and legacy_module:
             raise RuntimeError
         return None
 
-    app._api._at_command = mock.MagicMock(spec=XBee._at_command,
-                                          side_effect=mock_at_command)
-    app._api._queued_at = mock.MagicMock(spec=XBee._at_command,
-                                         side_effect=mock_at_command)
+    app._api._at_command = mock.MagicMock(
+        spec=XBee._at_command, side_effect=mock_at_command
+    )
+    app._api._queued_at = mock.MagicMock(
+        spec=XBee._at_command, side_effect=mock_at_command
+    )
     app._get_association_state = mock.MagicMock(
         spec=application.ControllerApplication._get_association_state,
-        side_effect=asyncio.coroutine(mock.MagicMock(return_value=0x00))
+        side_effect=asyncio.coroutine(mock.MagicMock(return_value=0x00)),
     )
 
     await app.form_network()
@@ -318,9 +331,17 @@ async def test_form_network(app):
     assert app._nwk == 0x0000
 
 
-async def _test_startup(app, ai_status=0xff, auto_form=False, api_mode=True,
-                        api_config_succeeds=True, ee=1, eo=2, zs=2,
-                        legacy_module=False):
+async def _test_startup(
+    app,
+    ai_status=0xFF,
+    auto_form=False,
+    api_mode=True,
+    api_config_succeeds=True,
+    ee=1,
+    eo=2,
+    zs=2,
+    legacy_module=False,
+):
     ai_tries = 5
     app._nwk = mock.sentinel.nwk
 
@@ -328,27 +349,28 @@ async def _test_startup(app, ai_status=0xff, auto_form=False, api_mode=True,
         nonlocal ai_tries
         if not api_mode:
             raise asyncio.TimeoutError
-        if cmd == 'CE' and legacy_module:
+        if cmd == "CE" and legacy_module:
             raise RuntimeError
 
-        ai_tries -= 1 if cmd == 'AI' else 0
+        ai_tries -= 1 if cmd == "AI" else 0
         return {
-            'AI': ai_status if ai_tries < 0 else 0xff,
-            'CE': 1 if ai_status == 0 else 0,
-            'EO': eo,
-            'EE': ee,
-            'ID': mock.sentinel.at_id,
-            'MY': 0xfffe if ai_status else 0x0000,
-            'NJ': mock.sentinel.at_nj,
-            'OI': mock.sentinel.at_oi,
-            'OP': mock.sentinel.at_op,
-            'SH': 0x01020304,
-            'SL': 0x05060708,
-            'ZS': zs,
+            "AI": ai_status if ai_tries < 0 else 0xFF,
+            "CE": 1 if ai_status == 0 else 0,
+            "EO": eo,
+            "EE": ee,
+            "ID": mock.sentinel.at_id,
+            "MY": 0xFFFE if ai_status else 0x0000,
+            "NJ": mock.sentinel.at_nj,
+            "OI": mock.sentinel.at_oi,
+            "OP": mock.sentinel.at_op,
+            "SH": 0x01020304,
+            "SL": 0x05060708,
+            "ZS": zs,
         }.get(cmd, None)
 
-    app._api._at_command = mock.MagicMock(spec=XBee._at_command,
-                                          side_effect=_at_command_mock)
+    app._api._at_command = mock.MagicMock(
+        spec=XBee._at_command, side_effect=_at_command_mock
+    )
 
     async def init_api_mode_mock():
         nonlocal api_mode
@@ -356,8 +378,7 @@ async def _test_startup(app, ai_status=0xff, auto_form=False, api_mode=True,
         return api_config_succeeds
 
     app._api.init_api_mode = mock.MagicMock(side_effect=init_api_mode_mock)
-    app.form_network = mock.MagicMock(
-        side_effect=asyncio.coroutine(mock.MagicMock()))
+    app.form_network = mock.MagicMock(side_effect=asyncio.coroutine(mock.MagicMock()))
 
     await app.startup(auto_form=auto_form)
     return app
@@ -379,13 +400,13 @@ async def test_startup_ai(app):
 
     auto_form = True
     await _test_startup(app, 0x06, auto_form)
-    assert app._nwk == 0xfffe
+    assert app._nwk == 0xFFFE
     assert app._ieee == t.EUI64(range(1, 9))
     assert app.form_network.call_count == 1
 
     auto_form = False
     await _test_startup(app, 0x06, auto_form)
-    assert app._nwk == 0xfffe
+    assert app._nwk == 0xFFFE
     assert app._ieee == t.EUI64(range(1, 9))
     assert app.form_network.call_count == 0
 
@@ -397,7 +418,7 @@ async def test_startup_ai(app):
 
     auto_form = False
     await _test_startup(app, 0x06, auto_form, legacy_module=True)
-    assert app._nwk == 0xfffe
+    assert app._nwk == 0xFFFE
     assert app._ieee == t.EUI64(range(1, 9))
     assert app.form_network.call_count == 0
 
@@ -422,8 +443,7 @@ async def test_startup_no_api_mode(app):
 @pytest.mark.asyncio
 async def test_startup_api_mode_config_fails(app):
     auto_form = True
-    await _test_startup(app, 0x00, auto_form,
-                        api_mode=False, api_config_succeeds=False)
+    await _test_startup(app, 0x00, auto_form, api_mode=False, api_config_succeeds=False)
     assert app._nwk == mock.sentinel.nwk
     assert app._ieee is None
     assert app.form_network.call_count == 0
@@ -434,25 +454,33 @@ async def test_startup_api_mode_config_fails(app):
 @pytest.mark.asyncio
 async def test_permit(app):
     app._api._at_command = mock.MagicMock(
-        side_effect=asyncio.coroutine(mock.MagicMock()))
+        side_effect=asyncio.coroutine(mock.MagicMock())
+    )
     time_s = 30
     await app.permit_ncp(time_s)
     assert app._api._at_command.call_count == 3
     assert app._api._at_command.call_args_list[0][0][1] == time_s
 
 
-async def _test_request(app, do_reply=True, expect_reply=True,
-                        send_success=True, send_timeout=False,
-                        logical_type=None, **kwargs):
+async def _test_request(
+    app,
+    do_reply=True,
+    expect_reply=True,
+    send_success=True,
+    send_timeout=False,
+    logical_type=None,
+    **kwargs
+):
     seq = 123
     nwk = 0x2345
-    ieee = t.EUI64(b'\x01\x02\x03\x04\x05\x06\x07\x08')
+    ieee = t.EUI64(b"\x01\x02\x03\x04\x05\x06\x07\x08")
     dev = app.add_device(ieee, nwk)
     dev.node_desc = mock.MagicMock()
     dev.node_desc.logical_type = logical_type
 
-    def _mock_command(cmdname, ieee, nwk, src_ep, dst_ep, cluster,
-                      profile, radius, options, data):
+    def _mock_command(
+        cmdname, ieee, nwk, src_ep, dst_ep, cluster, profile, radius, options, data
+    ):
         send_fut = asyncio.Future()
         if not send_timeout:
             if send_success:
@@ -466,7 +494,9 @@ async def _test_request(app, do_reply=True, expect_reply=True,
         return send_fut
 
     app._api._command = mock.MagicMock(side_effect=_mock_command)
-    return await app.request(nwk, 0x0260, 1, 2, 3, seq, [4, 5, 6], expect_reply=expect_reply, **kwargs)
+    return await app.request(
+        nwk, 0x0260, 1, 2, 3, seq, [4, 5, 6], expect_reply=expect_reply, **kwargs
+    )
 
 
 @pytest.mark.asyncio
@@ -500,19 +530,28 @@ async def test_request_send_fail(app):
 @pytest.mark.asyncio
 async def test_request_extended_timeout(app):
     lt = LogicalType.Router
-    assert await _test_request(app, True, True, logical_type=lt) == mock.sentinel.reply_result
+    assert (
+        await _test_request(app, True, True, logical_type=lt)
+        == mock.sentinel.reply_result
+    )
     assert app._api._command.call_count == 1
     assert app._api._command.call_args[0][8] & 0x40 == 0x00
     app._api._command.reset_mock()
 
     lt = None
-    assert await _test_request(app, True, True, logical_type=lt) == mock.sentinel.reply_result
+    assert (
+        await _test_request(app, True, True, logical_type=lt)
+        == mock.sentinel.reply_result
+    )
     assert app._api._command.call_count == 1
     assert app._api._command.call_args[0][8] & 0x40 == 0x40
     app._api._command.reset_mock()
 
     lt = LogicalType.EndDevice
-    assert await _test_request(app, True, True, logical_type=lt) == mock.sentinel.reply_result
+    assert (
+        await _test_request(app, True, True, logical_type=lt)
+        == mock.sentinel.reply_result
+    )
     assert app._api._command.call_count == 1
     assert app._api._command.call_args[0][8] & 0x40 == 0x40
     app._api._command.reset_mock()
@@ -528,7 +567,7 @@ def _handle_reply(app, tsn):
         mock.sentinel.dst_ep,
         tsn,
         mock.sentinel.command_id,
-        mock.sentinel.args
+        mock.sentinel.args,
     )
 
 
@@ -583,8 +622,7 @@ def test_remote_at_cmd(app, device):
     app.get_device = mock.MagicMock(return_value=dev)
     app._api = mock.MagicMock(spec=XBee)
     s = mock.sentinel
-    app.remote_at_command(s.nwk, s.cmd, s.data,
-                          apply_changes=True, encryption=True)
+    app.remote_at_command(s.nwk, s.cmd, s.data, apply_changes=True, encryption=True)
     assert app._api._remote_at_command.call_count == 1
     assert app._api._remote_at_command.call_args[0][0] is dev.ieee
     assert app._api._remote_at_command.call_args[0][1] == s.nwk
@@ -595,7 +633,7 @@ def test_remote_at_cmd(app, device):
 
 @pytest.fixture
 def ieee():
-    return t.EUI64.deserialize(b'\x00\x01\x02\x03\x04\x05\x06\x07')[0]
+    return t.EUI64.deserialize(b"\x00\x01\x02\x03\x04\x05\x06\x07")[0]
 
 
 @pytest.fixture
@@ -609,18 +647,22 @@ def test_rx_device_annce(app, ieee, nwk):
     device = mock.MagicMock()
     device.status = device.Status.NEW
     app.get_device = mock.MagicMock(return_value=device)
-    app.deserialize = mock.MagicMock(return_value=(mock.sentinel.tsn,
-                                                   mock.sentinel.cmd_id,
-                                                   False,
-                                                   mock.sentinel.args, ))
+    app.deserialize = mock.MagicMock(
+        return_value=(
+            mock.sentinel.tsn,
+            mock.sentinel.cmd_id,
+            False,
+            mock.sentinel.args,
+        )
+    )
     app.handle_join = mock.MagicMock()
     app._handle_reply = mock.MagicMock()
     app.handle_message = mock.MagicMock()
 
-    data = t.uint8_t(0xaa).serialize()
+    data = t.uint8_t(0xAA).serialize()
     data += nwk.serialize()
     data += ieee.serialize()
-    data += t.uint8_t(0x8e).serialize()
+    data += t.uint8_t(0x8E).serialize()
 
     app.handle_rx(
         ieee,

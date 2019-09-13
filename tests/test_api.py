@@ -19,8 +19,8 @@ async def test_connect(monkeypatch):
     api = xbee_api.XBee()
     dev = mock.MagicMock()
     monkeypatch.setattr(
-        uart, 'connect',
-        mock.MagicMock(side_effect=asyncio.coroutine(mock.MagicMock())))
+        uart, "connect", mock.MagicMock(side_effect=asyncio.coroutine(mock.MagicMock()))
+    )
     await api.connect(dev, 115200)
 
 
@@ -32,7 +32,8 @@ def test_close(api):
 
 def test_commands():
     import string
-    anum = string.ascii_letters + string.digits + '_'
+
+    anum = string.ascii_letters + string.digits + "_"
     commands = {**xbee_api.COMMAND_REQUESTS, **xbee_api.COMMAND_RESPONSES}
 
     for cmd_name, cmd_opts in commands.items():
@@ -50,6 +51,7 @@ async def test_command(api):
     def mock_api_frame(name, *args):
         c = xbee_api.COMMAND_REQUESTS[name]
         return mock.sentinel.api_frame_data, c[2]
+
     api._api_frame = mock.MagicMock(side_effect=mock_api_frame)
     api._uart.send = mock.MagicMock()
 
@@ -83,7 +85,9 @@ async def test_command(api):
 
 
 async def _test_at_or_queued_at_command(api, cmd, monkeypatch, do_reply=True):
-    monkeypatch.setattr(t, 'serialize', mock.MagicMock(return_value=mock.sentinel.serialize))
+    monkeypatch.setattr(
+        t, "serialize", mock.MagicMock(return_value=mock.sentinel.serialize)
+    )
 
     def mock_command(name, *args):
         rsp = xbee_api.COMMAND_REQUESTS[name][2]
@@ -101,8 +105,8 @@ async def _test_at_or_queued_at_command(api, cmd, monkeypatch, do_reply=True):
         res = await cmd(at_cmd, mock.sentinel.args)
         assert t.serialize.call_count == 1
         assert api._command.call_count == 1
-        assert api._command.call_args[0][0] in ('at', 'queued_at')
-        assert api._command.call_args[0][1] == at_cmd.encode('ascii')
+        assert api._command.call_args[0][0] in ("at", "queued_at")
+        assert api._command.call_args[0][1] == at_cmd.encode("ascii")
         assert api._command.call_args[0][2] == mock.sentinel.serialize
         assert res == mock.sentinel.at_result
         t.serialize.reset_mock()
@@ -111,15 +115,15 @@ async def _test_at_or_queued_at_command(api, cmd, monkeypatch, do_reply=True):
 
 @pytest.mark.asyncio
 async def test_at_command(api, monkeypatch):
-    await _test_at_or_queued_at_command(api, api._at_command,
-                                        monkeypatch)
+    await _test_at_or_queued_at_command(api, api._at_command, monkeypatch)
 
 
 @pytest.mark.asyncio
 async def test_at_command_no_response(api, monkeypatch):
     with pytest.raises(asyncio.TimeoutError):
-        await _test_at_or_queued_at_command(api, api._at_command,
-                                            monkeypatch, do_reply=False)
+        await _test_at_or_queued_at_command(
+            api, api._at_command, monkeypatch, do_reply=False
+        )
 
 
 @pytest.mark.asyncio
@@ -128,7 +132,9 @@ async def test_queued_at_command(api, monkeypatch):
 
 
 async def _test_remote_at_command(api, monkeypatch, do_reply=True):
-    monkeypatch.setattr(t, 'serialize', mock.MagicMock(return_value=mock.sentinel.serialize))
+    monkeypatch.setattr(
+        t, "serialize", mock.MagicMock(return_value=mock.sentinel.serialize)
+    )
 
     def mock_command(name, *args):
         rsp = xbee_api.COMMAND_REQUESTS[name][2]
@@ -144,15 +150,19 @@ async def _test_remote_at_command(api, monkeypatch, do_reply=True):
 
     for at_cmd in xbee_api.AT_COMMANDS:
         res = await api._remote_at_command(
-            mock.sentinel.ieee, mock.sentinel.nwk, mock.sentinel.opts, at_cmd,
-            mock.sentinel.args)
+            mock.sentinel.ieee,
+            mock.sentinel.nwk,
+            mock.sentinel.opts,
+            at_cmd,
+            mock.sentinel.args,
+        )
         assert t.serialize.call_count == 1
         assert api._command.call_count == 1
-        assert api._command.call_args[0][0] == 'remote_at'
+        assert api._command.call_args[0][0] == "remote_at"
         assert api._command.call_args[0][1] == mock.sentinel.ieee
         assert api._command.call_args[0][2] == mock.sentinel.nwk
         assert api._command.call_args[0][3] == mock.sentinel.opts
-        assert api._command.call_args[0][4] == at_cmd.encode('ascii')
+        assert api._command.call_args[0][4] == at_cmd.encode("ascii")
         assert api._command.call_args[0][5] == mock.sentinel.serialize
         assert res == mock.sentinel.at_result
         t.serialize.reset_mock()
@@ -166,7 +176,7 @@ async def test_remote_at_cmd(api, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_remote_at_cmd_no_rsp(api, monkeypatch):
-    monkeypatch.setattr(xbee_api, 'REMOTE_AT_COMMAND_TIMEOUT', 0.1)
+    monkeypatch.setattr(xbee_api, "REMOTE_AT_COMMAND_TIMEOUT", 0.1)
     with pytest.raises(asyncio.TimeoutError):
         await _test_remote_at_command(api, monkeypatch, do_reply=False)
 
@@ -183,27 +193,33 @@ def test_api_frame(api):
 
 
 def test_frame_received(api, monkeypatch):
-    monkeypatch.setattr(t, 'deserialize', mock.MagicMock(
-        return_value=(
-            [
-                mock.sentinel.arg_0,
-                mock.sentinel.arg_1,
-                mock.sentinel.arg_2,
-                mock.sentinel.arg_3,
-                mock.sentinel.arg_4,
-                mock.sentinel.arg_5,
-                mock.sentinel.arg_6,
-                mock.sentinel.arg_7,
-                mock.sentinel.arg_8,
-            ], b'')
-    ))
+    monkeypatch.setattr(
+        t,
+        "deserialize",
+        mock.MagicMock(
+            return_value=(
+                [
+                    mock.sentinel.arg_0,
+                    mock.sentinel.arg_1,
+                    mock.sentinel.arg_2,
+                    mock.sentinel.arg_3,
+                    mock.sentinel.arg_4,
+                    mock.sentinel.arg_5,
+                    mock.sentinel.arg_6,
+                    mock.sentinel.arg_7,
+                    mock.sentinel.arg_8,
+                ],
+                b"",
+            )
+        ),
+    )
     my_handler = mock.MagicMock()
 
     for cmd, cmd_opts in xbee_api.COMMAND_RESPONSES.items():
         cmd_id = cmd_opts[0]
-        payload = b'\x01\x02\x03\x04'
-        data = cmd_id.to_bytes(1, 'big') + payload
-        setattr(api, '_handle_{}'.format(cmd), my_handler)
+        payload = b"\x01\x02\x03\x04"
+        data = cmd_id.to_bytes(1, "big") + payload
+        setattr(api, "_handle_{}".format(cmd), my_handler)
         api.frame_received(data)
         assert t.deserialize.call_count == 1
         assert t.deserialize.call_args[0][0] == payload
@@ -217,28 +233,29 @@ def test_frame_received(api, monkeypatch):
 
 
 def test_frame_received_no_handler(api, monkeypatch):
-    monkeypatch.setattr(t, 'deserialize', mock.MagicMock(
-        return_value=(b'deserialized data', b'')))
+    monkeypatch.setattr(
+        t, "deserialize", mock.MagicMock(return_value=(b"deserialized data", b""))
+    )
     my_handler = mock.MagicMock()
-    cmd = 'no_handler'
+    cmd = "no_handler"
     cmd_id = 0x00
     xbee_api.COMMAND_RESPONSES[cmd] = (cmd_id, (), None)
     api._commands_by_id[cmd_id] = cmd
 
     cmd_opts = xbee_api.COMMAND_RESPONSES[cmd]
     cmd_id = cmd_opts[0]
-    payload = b'\x01\x02\x03\x04'
-    data = cmd_id.to_bytes(1, 'big') + payload
+    payload = b"\x01\x02\x03\x04"
+    data = cmd_id.to_bytes(1, "big") + payload
     api.frame_received(data)
     assert t.deserialize.call_count == 1
     assert t.deserialize.call_args[0][0] == payload
     assert my_handler.call_count == 0
 
 
-def _handle_at_response(api, tsn, status, at_response=b''):
-    data = (tsn, 'AI'.encode('ascii'), status, at_response)
+def _handle_at_response(api, tsn, status, at_response=b""):
+    data = (tsn, "AI".encode("ascii"), status, at_response)
     response = asyncio.Future()
-    api._awaiting[tsn] = (response, )
+    api._awaiting[tsn] = (response,)
     api._handle_at_response(*data)
     return response
 
@@ -279,8 +296,7 @@ def test_handle_at_response_undef_error(api):
 def test_handle_remote_at_rsp(api):
     api._handle_at_response = mock.MagicMock()
     s = mock.sentinel
-    api._handle_remote_at_response(s.frame_id, s.ieee, s.nwk, s.cmd,
-                                   s.status, s.data)
+    api._handle_remote_at_response(s.frame_id, s.ieee, s.nwk, s.cmd, s.status, s.data)
     assert api._handle_at_response.call_count == 1
     assert api._handle_at_response.call_args[0][0] == s.frame_id
     assert api._handle_at_response.call_args[0][1] == s.cmd
@@ -317,8 +333,16 @@ def test_handle_modem_status(api):
 
 def test_handle_explicit_rx_indicator(api):
     s = mock.sentinel
-    data = [s.src_ieee, s.src_nwk, s.src_ep, s.dst_ep, s.cluster_id, s.profile,
-            s.opts, b'abcdef']
+    data = [
+        s.src_ieee,
+        s.src_nwk,
+        s.src_ep,
+        s.dst_ep,
+        s.cluster_id,
+        s.profile,
+        s.opts,
+        b"abcdef",
+    ]
     api._app = mock.MagicMock()
     api._app.handle_rx = mock.MagicMock()
     api._handle_explicit_rx_indicator(*data)
@@ -329,12 +353,11 @@ def _handle_tx_status(api, status, wrong_frame_id=False):
     status = t.TXStatus(status)
     frame_id = 0x12
     send_fut = mock.MagicMock(spec=asyncio.Future)
-    api._awaiting[frame_id] = (send_fut, )
+    api._awaiting[frame_id] = (send_fut,)
     s = mock.sentinel
     if wrong_frame_id:
         frame_id += 1
-    api._handle_tx_status(frame_id, s.dst_nwk, s.retries, status,
-                          t.DiscoveryStatus())
+    api._handle_tx_status(frame_id, s.dst_nwk, s.retries, status, t.DiscoveryStatus())
     return send_fut
 
 
@@ -364,7 +387,7 @@ def test_handle_tx_status_duplicate(api):
     frame_id = 0x12
     send_fut = mock.MagicMock(spec=asyncio.Future)
     send_fut.set_result.side_effect = asyncio.InvalidStateError
-    api._awaiting[frame_id] = (send_fut, )
+    api._awaiting[frame_id] = (send_fut,)
     s = mock.sentinel
     api._handle_tx_status(frame_id, s.dst_nwk, s.retries, status, s.disc)
     assert len(api._awaiting) == 0
@@ -374,7 +397,7 @@ def test_handle_tx_status_duplicate(api):
 
 @pytest.mark.asyncio
 async def test_command_mode_at_cmd(api):
-    command = '+++'
+    command = "+++"
 
     def cmd_mode_send(cmd):
         api._cmd_mode_future.set_result(True)
@@ -387,7 +410,7 @@ async def test_command_mode_at_cmd(api):
 
 @pytest.mark.asyncio
 async def test_command_mode_at_cmd_timeout(api):
-    command = '+++'
+    command = "+++"
 
     api._uart.command_mode_send = mock.MagicMock()
 
@@ -397,7 +420,7 @@ async def test_command_mode_at_cmd_timeout(api):
 
 def test_handle_command_mode_rsp(api):
     api._cmd_mode_future = None
-    data = 'OK'
+    data = "OK"
     api.handle_command_mode_rsp(data)
 
     api._cmd_mode_future = asyncio.Future()
@@ -406,7 +429,7 @@ def test_handle_command_mode_rsp(api):
     assert api._cmd_mode_future.result() is True
 
     api._cmd_mode_future = asyncio.Future()
-    api.handle_command_mode_rsp('ERROR')
+    api.handle_command_mode_rsp("ERROR")
     assert api._cmd_mode_future.done()
     assert api._cmd_mode_future.result() is False
 
@@ -420,7 +443,8 @@ def test_handle_command_mode_rsp(api):
 @pytest.mark.asyncio
 async def test_enter_at_command_mode(api):
     api.command_mode_at_cmd = mock.MagicMock(
-        side_effect=asyncio.coroutine(lambda x: mock.sentinel.at_response))
+        side_effect=asyncio.coroutine(lambda x: mock.sentinel.at_response)
+    )
 
     res = await api.enter_at_command_mode()
     assert res == mock.sentinel.at_response
@@ -429,13 +453,14 @@ async def test_enter_at_command_mode(api):
 @pytest.mark.asyncio
 async def test_api_mode_at_commands(api):
     api.command_mode_at_cmd = mock.MagicMock(
-        side_effect=asyncio.coroutine(lambda x: mock.sentinel.api_mode))
+        side_effect=asyncio.coroutine(lambda x: mock.sentinel.api_mode)
+    )
 
     res = await api.api_mode_at_commands(57600)
     assert res is True
 
     async def mock_at_cmd(cmd):
-        if cmd == 'ATWR\r':
+        if cmd == "ATWR\r":
             return False
         return True
 
@@ -446,16 +471,18 @@ async def test_api_mode_at_commands(api):
 
 @pytest.mark.asyncio
 async def test_init_api_mode(api, monkeypatch):
-    monkeypatch.setattr(api._uart, 'baudrate', 57600)
+    monkeypatch.setattr(api._uart, "baudrate", 57600)
     api.enter_at_command_mode = mock.MagicMock(
-        side_effect=asyncio.coroutine(mock.MagicMock(return_value=True)))
+        side_effect=asyncio.coroutine(mock.MagicMock(return_value=True))
+    )
 
     res = await api.init_api_mode()
     assert res is None
     assert api.enter_at_command_mode.call_count == 1
 
     api.enter_at_command_mode = mock.MagicMock(
-        side_effect=asyncio.coroutine(mock.MagicMock(return_value=False)))
+        side_effect=asyncio.coroutine(mock.MagicMock(return_value=False))
+    )
 
     res = await api.init_api_mode()
     assert res is False
@@ -469,7 +496,8 @@ async def test_init_api_mode(api, monkeypatch):
     api._uart.baudrate = 57600
     api.enter_at_command_mode = mock.MagicMock(side_effect=enter_at_mode)
     api.api_mode_at_commands = mock.MagicMock(
-        side_effect=asyncio.coroutine(mock.MagicMock(return_value=True)))
+        side_effect=asyncio.coroutine(mock.MagicMock(return_value=True))
+    )
 
     res = await api.init_api_mode()
     assert res is True
