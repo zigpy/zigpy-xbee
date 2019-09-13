@@ -34,27 +34,28 @@ async def test_connect(monkeypatch):
         protocol = protocol_factory()
         loop.call_soon(protocol.connection_made, None)
         return None, protocol
-    monkeypatch.setattr(serial_asyncio, 'create_serial_connection', mock_conn)
+
+    monkeypatch.setattr(serial_asyncio, "create_serial_connection", mock_conn)
 
     await uart.connect(portmock, 57600, api)
 
 
 def test_command_mode_rsp(gw):
-    data = b'OK'
+    data = b"OK"
     gw.command_mode_rsp(data)
     assert gw._api.handle_command_mode_rsp.call_count == 1
-    assert gw._api.handle_command_mode_rsp.call_args[0][0] == 'OK'
+    assert gw._api.handle_command_mode_rsp.call_args[0][0] == "OK"
 
 
 def test_command_mode_rsp_decode_exc(gw):
-    data = b'OK\x81'
+    data = b"OK\x81"
     with pytest.raises(UnicodeDecodeError):
         gw.command_mode_rsp(data)
     assert gw._api.handle_command_mode_rsp.call_count == 0
 
 
 def test_command_mode_send(gw):
-    data = b'ATAP2\x0D'
+    data = b"ATAP2\x0D"
     gw.command_mode_send(data)
     assert gw._transport.write.call_count == 1
     assert gw._transport.write.called_once_with(data)
@@ -66,7 +67,7 @@ def test_close(gw):
 
 
 def test_data_received_chunk_frame(gw):
-    data = b'~\x00\x07\x8b\x0e\xff\xfd\x00$\x02D'
+    data = b"~\x00\x07\x8b\x0e\xff\xfd\x00$\x02D"
     gw.frame_received = mock.MagicMock()
     gw.data_received(data[:-4])
     assert gw.frame_received.call_count == 0
@@ -76,7 +77,7 @@ def test_data_received_chunk_frame(gw):
 
 
 def test_data_received_full_frame(gw):
-    data = b'~\x00\x07\x8b\x0e\xff\xfd\x00$\x02D'
+    data = b"~\x00\x07\x8b\x0e\xff\xfd\x00$\x02D"
     gw.frame_received = mock.MagicMock()
     gw.data_received(data)
     assert gw.frame_received.call_count == 1
@@ -84,38 +85,38 @@ def test_data_received_full_frame(gw):
 
 
 def test_data_received_incomplete_frame(gw):
-    data = b'~\x00\x07\x8b\x0e\xff\xfd'
+    data = b"~\x00\x07\x8b\x0e\xff\xfd"
     gw.frame_received = mock.MagicMock()
     gw.data_received(data)
     assert gw.frame_received.call_count == 0
 
 
 def test_data_received_at_response(gw):
-    data = b'OK\x0D'
+    data = b"OK\x0D"
     gw.frame_received = mock.MagicMock()
     gw.command_mode_rsp = mock.MagicMock()
 
     gw.data_received(data)
     assert gw.command_mode_rsp.call_count == 1
-    assert gw.command_mode_rsp.call_args[0][0] == b'OK'
+    assert gw.command_mode_rsp.call_args[0][0] == b"OK"
 
 
 def test_extract(gw):
-    gw._buffer = b'\x7E\x00\x02\x23\x7D\x31\xCBextra'
+    gw._buffer = b"\x7E\x00\x02\x23\x7D\x31\xCBextra"
     frame = gw._extract_frame()
-    assert frame == b'\x23\x11'
-    assert gw._buffer == b'extra'
+    assert frame == b"\x23\x11"
+    assert gw._buffer == b"extra"
 
 
 def test_extract_wrong_checksum(gw):
-    gw._buffer = b'\x7E\x00\x02\x23\x7D\x31\xCEextra'
+    gw._buffer = b"\x7E\x00\x02\x23\x7D\x31\xCEextra"
     frame = gw._extract_frame()
     assert frame is None
-    assert gw._buffer == b'extra'
+    assert gw._buffer == b"extra"
 
 
 def test_extract_checksum_none(gw):
-    data = b'\x7E\x00\x02\x23\x7D\x31'
+    data = b"\x7E\x00\x02\x23\x7D\x31"
     gw._buffer = data
     gw._checksum = lambda x: None
     frame = gw._extract_frame()
@@ -124,7 +125,7 @@ def test_extract_checksum_none(gw):
 
 
 def test_extract_frame_len_none(gw):
-    data = b'\x7E'
+    data = b"\x7E"
     gw._buffer = data
     frame = gw._extract_frame()
     assert frame is None
@@ -132,7 +133,7 @@ def test_extract_frame_len_none(gw):
 
 
 def test_extract_frame_no_start(gw):
-    data = b'\x00\x02\x23\x7D\x31'
+    data = b"\x00\x02\x23\x7D\x31"
     gw._buffer = data
     frame = gw._extract_frame()
     assert frame is None
@@ -140,22 +141,26 @@ def test_extract_frame_no_start(gw):
 
 
 def test_frame_received(gw):
-    data = b'frame'
+    data = b"frame"
     gw.frame_received(data)
     assert gw._api.frame_received.call_count == 1
     assert gw._api.frame_received.call_args[0][0] == data
 
 
 def test_send(gw):
-    gw.send(b'\x23\x11')
+    gw.send(b"\x23\x11")
     assert gw._transport.write.call_count == 1
-    data = b'\x7E\x00\x02\x23\x7D\x31\xCB'
+    data = b"\x7E\x00\x02\x23\x7D\x31\xCB"
     assert gw._transport.write.called_once_with(data)
 
 
 def test_escape(gw):
-    data = b''.join([a.to_bytes(1, 'big') + b.to_bytes(1, 'big')
-                     for a, b in zip(gw.RESERVED, b'\x22\x33\x44\x55')])
+    data = b"".join(
+        [
+            a.to_bytes(1, "big") + b.to_bytes(1, "big")
+            for a, b in zip(gw.RESERVED, b"\x22\x33\x44\x55")
+        ]
+    )
     escaped = gw._escape(data)
     assert len(data) < len(escaped)
     chk = [c for c in escaped if c in gw.RESERVED]
@@ -164,10 +169,14 @@ def test_escape(gw):
 
 
 def test_unescape(gw):
-    extra = b'\xaa\xbb\xcc\xff'
+    extra = b"\xaa\xbb\xcc\xff"
     escaped = b'}^"}]3}1D}3U'
-    chk = b''.join([a.to_bytes(1, 'big') + b.to_bytes(1, 'big')
-                    for a, b in zip(gw.RESERVED, b'\x22\x33\x44\x55')])
+    chk = b"".join(
+        [
+            a.to_bytes(1, "big") + b.to_bytes(1, "big")
+            for a, b in zip(gw.RESERVED, b"\x22\x33\x44\x55")
+        ]
+    )
     unescaped, rest = gw._get_unescaped(escaped + extra, 8)
     assert len(escaped) > len(unescaped)
     assert rest == extra

@@ -8,15 +8,15 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Gateway(asyncio.Protocol):
-    START = b'\x7E'
-    ESCAPE = b'\x7D'
-    XON = b'\x11'
-    XOFF = b'\x13'
+    START = b"\x7E"
+    ESCAPE = b"\x7D"
+    XON = b"\x11"
+    XOFF = b"\x13"
 
     RESERVED = START + ESCAPE + XON + XOFF
 
     def __init__(self, api, connected_future=None):
-        self._buffer = b''
+        self._buffer = b""
         self._connected_future = connected_future
         self._api = api
 
@@ -24,7 +24,9 @@ class Gateway(asyncio.Protocol):
         """Send data, taking care of escaping and framing"""
         LOGGER.debug("Sending: %s", data)
         checksum = bytes([self._checksum(data)])
-        frame = self.START + self._escape(len(data).to_bytes(2, 'big') + data + checksum)
+        frame = self.START + self._escape(
+            len(data).to_bytes(2, "big") + data + checksum
+        )
         self._transport.write(frame)
 
     @property
@@ -38,8 +40,8 @@ class Gateway(asyncio.Protocol):
         if baudrate in self._transport.serial.BAUDRATES:
             self._transport.serial.baudrate = baudrate
         else:
-            raise ValueError("baudrate must be one of {}".format(
-                self._transport.serial.BAUDRATES)
+            raise ValueError(
+                "baudrate must be one of {}".format(self._transport.serial.BAUDRATES)
             )
 
     def connection_made(self, transport):
@@ -52,10 +54,9 @@ class Gateway(asyncio.Protocol):
     def command_mode_rsp(self, data):
         """Handles AT command mode response."""
         try:
-            data = data.decode('ascii')
+            data = data.decode("ascii")
         except UnicodeDecodeError as ex:
-            LOGGER.debug("Couldn't ascii decode AT command mode response: %s",
-                         ex)
+            LOGGER.debug("Couldn't ascii decode AT command mode response: %s", ex)
             raise
         LOGGER.debug("Handling AT command mode response: %s", data)
         self._api.handle_command_mode_rsp(data)
@@ -73,8 +74,8 @@ class Gateway(asyncio.Protocol):
             if frame is None:
                 break
             self.frame_received(frame)
-        if self._buffer[-1:] == b'\r':
-            rsp, self._buffer = (self._buffer[:-1], b'')
+        if self._buffer[-1:] == b"\r":
+            rsp, self._buffer = (self._buffer[:-1], b"")
             self.command_mode_rsp(rsp)
 
     def frame_received(self, frame):
@@ -90,12 +91,12 @@ class Gateway(asyncio.Protocol):
         if first_start < 0:
             return None
 
-        data = self._buffer[first_start + 1:]
+        data = self._buffer[first_start + 1 :]
         frame_len, data = self._get_unescaped(data, 2)
         if frame_len is None:
             return None
 
-        frame_len = int.from_bytes(frame_len, 'big')
+        frame_len = int.from_bytes(frame_len, "big")
         frame, data = self._get_unescaped(data, frame_len)
         if frame is None:
             return None
