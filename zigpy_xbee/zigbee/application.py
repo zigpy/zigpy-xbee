@@ -9,9 +9,9 @@ import zigpy.quirks
 import zigpy.types
 import zigpy.util
 from zigpy.zcl.clusters.general import Groups
-from zigpy.zdo.types import LogicalType, NodeDescriptor
+from zigpy.zdo.types import NodeDescriptor, ZDOCmd
 
-from zigpy_xbee.types import UNKNOWN_IEEE
+from zigpy_xbee.types import TXStatus, UNKNOWN_IEEE, UNKNOWN_NWK
 
 
 # how long coordinator would hold message for an end device in 10ms units
@@ -33,7 +33,6 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._api = api
         api.set_application(self)
 
-        self._pending = {}
         self._nwk = 0
 
     async def shutdown(self):
@@ -133,10 +132,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             state = await self._api._at_command("AI")
         return state
 
-    @zigpy.util.retryable_request
     async def request(
         self,
-        nwk,
+        device,
         profile,
         cluster,
         src_ep,
@@ -144,52 +142,47 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         sequence,
         data,
         expect_reply=True,
-        timeout=TIMEOUT_REPLY,
+        use_ieee=False,
     ):
-        LOGGER.debug("Zigbee request seq %s", sequence)
-        assert sequence not in self._pending
-        if expect_reply:
-            reply_fut = asyncio.Future()
-            self._pending[sequence] = reply_fut
+        """Submit and send data out as an unicast transmission.
 
-        dev = self.get_device(nwk=nwk)
-        if dev.node_desc.logical_type in (LogicalType.EndDevice, None):
-            tx_opts = 0x60
-            rx_timeout = TIMEOUT_REPLY_EXTENDED
-        else:
-            tx_opts = 0x20
-            rx_timeout = timeout
+        :param device: destination device
+        :param profile: Zigbee Profile ID to use for outgoing message
+        :param cluster: cluster id where the message is being sent
+        :param src_ep: source endpoint id
+        :param dst_ep: destination endpoint id
+        :param sequence: transaction sequence number of the message
+        :param data: Zigbee message payload
+        :param expect_reply: True if this is essentially a request
+        :param use_ieee: use EUI64 for destination addressing
+        :returns: return a tuple of a status and an error_message. Original requestor
+                  has more context to provide a more meaningful error message
+        """
+        LOGGER.debug("Zigbee request tsn #%s: %s", sequence, binascii.hexlify(data))
+
+        tx_opts = 0x20
+        if expect_reply and device.node_desc.is_end_device in (True, None):
+            tx_opts |= 0x40
         send_req = self._api.tx_explicit(
-            dev.ieee, nwk, src_ep, dst_ep, cluster, profile, 0, tx_opts, data
+            device.ieee,
+            UNKNOWN_NWK if use_ieee else device.nwk,
+            src_ep,
+            dst_ep,
+            cluster,
+            profile,
+            0,
+            tx_opts,
+            data,
         )
 
         try:
             v = await asyncio.wait_for(send_req, timeout=TIMEOUT_TX_STATUS)
-        except (asyncio.TimeoutError, zigpy.exceptions.DeliveryError) as ex:
-            LOGGER.debug(
-                "[0x%04x:%s:0x%04x]: Error sending message: %s",
-                nwk,
-                dst_ep,
-                cluster,
-                ex,
-            )
-            self._pending.pop(sequence, None)
-            raise zigpy.exceptions.DeliveryError(
-                "[0x{:04x}:{}:0x{:04x}]: Delivery Error".format(nwk, dst_ep, cluster)
-            )
-        if expect_reply:
-            try:
-                return await asyncio.wait_for(reply_fut, rx_timeout)
-            except asyncio.TimeoutError as ex:
-                LOGGER.debug(
-                    "[0x%04x:%s:0x%04x]: no reply: %s", nwk, dst_ep, cluster, ex
-                )
-                raise zigpy.exceptions.DeliveryError(
-                    "[0x{:04x}:{}:{:04x}]: no reply".format(nwk, dst_ep, cluster)
-                )
-            finally:
-                self._pending.pop(sequence, None)
-        return v
+        except asyncio.TimeoutError:
+            return TXStatus.NETWORK_ACK_FAILURE, "Timeout waiting for ACK"
+
+        if v != TXStatus.SUCCESS:
+            return v, "Error sending tsn #%s: %s".format(sequence, v.name)
+        return v, "Succesfuly sent tsn #%s: %s".format(sequence, v.name)
 
     @zigpy.util.retryable_request
     def remote_at_command(
@@ -217,12 +210,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self, src_ieee, src_nwk, src_ep, dst_ep, cluster_id, profile_id, rxopts, data
     ):
         if src_nwk == 0:
-            # I'm not sure why we've started seeing ZDO requests from ourself.
-            # Ignore for now.
             LOGGER.info("handle_rx self addressed")
 
         ember_ieee = zigpy.types.EUI64(src_ieee)
-        if dst_ep == 0 and cluster_id == 0x13:
+        if dst_ep == 0 and cluster_id == ZDOCmd.Device_annce:
             # ZDO Device announce request
             nwk, rest = zigpy.types.NWK.deserialize(data[1:])
             ieee, rest = zigpy.types.EUI64.deserialize(rest)
@@ -255,82 +246,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 )
                 return
 
-        if device.status == zigpy.device.Status.NEW and dst_ep != 0:
-            # only allow ZDO responses while initializing device
-            LOGGER.debug(
-                "Received frame on uninitialized device %s (%s) for endpoint: %s",
-                device.ieee,
-                device.status,
-                dst_ep,
-            )
-            return
-        elif (
-            device.status == zigpy.device.Status.ZDO_INIT
-            and dst_ep != 0
-            and cluster_id != 0
-        ):
-            # only allow access to basic cluster while initializing endpoints
-            LOGGER.debug(
-                "Received frame on uninitialized device %s endpoint %s for cluster: %s",
-                device.ieee,
-                dst_ep,
-                cluster_id,
-            )
-            return
-
-        try:
-            tsn, command_id, is_reply, args = self.deserialize(
-                device, src_ep, cluster_id, data
-            )
-        except ValueError as e:
-            LOGGER.error(
-                "Failed to parse message (%s) on cluster %s, because %s",
-                binascii.hexlify(data),
-                cluster_id,
-                e,
-            )
-            return
-
-        if is_reply:
-            self._handle_reply(
-                device, profile_id, cluster_id, src_ep, dst_ep, tsn, command_id, args
-            )
-        else:
-            self.handle_message(
-                device,
-                False,
-                profile_id,
-                cluster_id,
-                src_ep,
-                dst_ep,
-                tsn,
-                command_id,
-                args,
-            )
-
-    def _handle_reply(
-        self, device, profile, cluster, src_ep, dst_ep, tsn, command_id, args
-    ):
-        try:
-            reply_fut = self._pending[tsn]
-            if reply_fut:
-                self._pending.pop(tsn)
-                reply_fut.set_result(args)
-            return
-        except KeyError:
-            LOGGER.warning(
-                "Unexpected response TSN=%s command=%s args=%s", tsn, command_id, args
-            )
-        except asyncio.futures.InvalidStateError as exc:
-            LOGGER.debug(
-                "Invalid state on future - probably duplicate response: %s", exc
-            )
-            # We've already handled, don't drop through to device handler
-            return
-
-        self.handle_message(
-            device, True, profile, cluster, src_ep, dst_ep, tsn, command_id, args
-        )
+        self.handle_message(device, profile_id, cluster_id, src_ep, dst_ep, data)
 
     async def broadcast(
         self,
@@ -344,8 +260,22 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         data,
         broadcast_address=zigpy.types.BroadcastAddress.RX_ON_WHEN_IDLE,
     ):
+        """Submit and send data out as an broadcast transmission.
+
+        :param profile: Zigbee Profile ID to use for outgoing message
+        :param cluster: cluster id where the message is being sent
+        :param src_ep: source endpoint id
+        :param dst_ep: destination endpoint id
+        :param grpid: group id to address the broadcast to
+        :param radius: max radius of the broadcast
+        :param sequence: transaction sequence number of the message
+        :param data: zigbee message payload
+        :param broadcast_address: broadcast address.
+        :returns: return a tuple of a status and an error_message. Original requestor
+                  has more context to provide a more meaningful error message
+        """
+
         LOGGER.debug("Broadcast request seq %s", sequence)
-        assert sequence not in self._pending
         broadcast_as_bytes = [
             zigpy.types.uint8_t(b) for b in broadcast_address.to_bytes(8, "big")
         ]
@@ -360,7 +290,14 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             0x20,
             data,
         )
-        return await asyncio.wait_for(request, timeout=TIMEOUT_TX_STATUS)
+        try:
+            v = await asyncio.wait_for(request, timeout=TIMEOUT_TX_STATUS)
+        except asyncio.TimeoutError:
+            return TXStatus.NETWORK_ACK_FAILURE, "Timeout waiting for ACK"
+
+        if v != TXStatus.SUCCESS:
+            return v, "Error sending broadcast tsn #%s: %s".format(sequence, v.name)
+        return v, "Succesfuly sent broadcast tsn #%s: %s".format(sequence, v.name)
 
 
 class XBeeCoordinator(zigpy.quirks.CustomDevice):
