@@ -12,12 +12,7 @@ setup(
     author="Russell Cloran",
     author_email="rcloran@gmail.com",
     license="GPL-3.0",
-    packages=find_packages(exclude=['*.tests']),
-    install_requires=[
-        'pyserial-asyncio',
-        'zigpy-homeassistant >= 0.3.3',
-    ],
-    tests_require=[
-        'pytest',
-    ],
+    packages=find_packages(exclude=["*.tests"]),
+    install_requires=["pyserial-asyncio", "zigpy-homeassistant >= 0.9.0a3"],
+    tests_require=["pytest"],
 )
