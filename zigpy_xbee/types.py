@@ -12,7 +12,7 @@ def deserialize(data, schema):
 
 
 def serialize(data, schema):
-    return b''.join(t(v).serialize() for t, v in zip(schema, data))
+    return b"".join(t(v).serialize() for t, v in zip(schema, data))
 
 
 class Bytes(bytes):
@@ -21,7 +21,7 @@ class Bytes(bytes):
 
     @classmethod
     def deserialize(cls, data):
-        return cls(data), b''
+        return cls(data), b""
 
 
 class ATCommand(Bytes):
@@ -34,13 +34,13 @@ class int_t(int):
     _signed = True
 
     def serialize(self):
-        return self.to_bytes(self._size, 'big', signed=self._signed)
+        return self.to_bytes(self._size, "big", signed=self._signed)
 
     @classmethod
     def deserialize(cls, data):
         # Work around https://bugs.python.org/issue23640
-        r = cls(int.from_bytes(data[:cls._size], 'big', signed=cls._signed))
-        data = data[cls._size:]
+        r = cls(int.from_bytes(data[: cls._size], "big", signed=cls._signed))
+        data = data[cls._size :]
         return r, data
 
 
@@ -127,7 +127,7 @@ class EUI64(zigpy.types.EUI64):
 
     def serialize(self):
         assert self._length == len(self)
-        return b''.join([i.serialize() for i in self])
+        return b"".join([i.serialize() for i in self])
 
 
 class UndefinedEnumMeta(enum.EnumMeta):
@@ -155,14 +155,14 @@ class FrameId(uint8_t):
 
 class NWK(uint16_t):
     def __repr__(self):
-        return '0x{:04x}'.format(self)
+        return "0x{:04x}".format(self)
 
     def __str__(self):
-        return '0x{:04x}'.format(self)
+        return "0x{:04x}".format(self)
 
 
-UNKNOWN_IEEE = EUI64([uint8_t(0xff) for i in range(0, 8)])
-UNKNOWN_NWK = NWK(0xfffe)
+UNKNOWN_IEEE = EUI64([uint8_t(0xFF) for i in range(0, 8)])
+UNKNOWN_NWK = NWK(0xFFFE)
 
 
 class TXStatus(uint8_t, UndefinedEnum):
@@ -223,7 +223,7 @@ class TXStatus(uint8_t, UndefinedEnum):
 
     # The payload in the frame was larger than allowed
     PAYLOAD_TOO_LARGE = 0x74
-    _UNDEFINED = 0x2c
+    _UNDEFINED = 0x2C
 
 
 class DiscoveryStatus(uint8_t, UndefinedEnum):
