@@ -91,7 +91,7 @@ def test_rx_unknown_device(app, device):
     app.devices[dev.ieee] = dev
     app.get_device = mock.MagicMock(side_effect=[KeyError, dev])
     app.handle_rx(
-        b"\x01\x02\x03\x04\x05\x06\x07\x08",
+        b"\x08\x07\x06\x05\x04\x03\x02\x01",
         0x3334,
         mock.sentinel.src_ep,
         mock.sentinel.dst_ep,
@@ -300,8 +300,8 @@ async def _test_startup(
             "NJ": mock.sentinel.at_nj,
             "OI": mock.sentinel.at_oi,
             "OP": mock.sentinel.at_op,
-            "SH": 0x01020304,
-            "SL": 0x05060708,
+            "SH": 0x08070605,
+            "SL": 0x04030201,
             "ZS": zs,
         }.get(cmd, None)
 
