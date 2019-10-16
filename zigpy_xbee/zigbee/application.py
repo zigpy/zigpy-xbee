@@ -11,7 +11,7 @@ import zigpy.util
 from zigpy.zcl.clusters.general import Groups
 from zigpy.zdo.types import NodeDescriptor, ZDOCmd
 
-from zigpy_xbee.types import TXStatus, UNKNOWN_IEEE, UNKNOWN_NWK
+from zigpy_xbee.types import EUI64, TXStatus, UNKNOWN_IEEE, UNKNOWN_NWK
 
 
 # how long coordinator would hold message for an end device in 10ms units
@@ -54,8 +54,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         serial_high = await self._api._at_command("SH")
         serial_low = await self._api._at_command("SL")
-        as_bytes = serial_high.to_bytes(4, "big") + serial_low.to_bytes(4, "big")
-        self._ieee = zigpy.types.EUI64([zigpy.types.uint8_t(b) for b in as_bytes])
+        ieee = EUI64.deserialize(
+            serial_high.to_bytes(4, "big") + serial_low.to_bytes(4, "big")
+        )[0]
+        self._ieee = zigpy.types.EUI64(ieee)
         LOGGER.debug("Read local IEEE address as %s", self._ieee)
 
         association_state = await self._get_association_state()
@@ -277,10 +279,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         LOGGER.debug("Broadcast request seq %s", sequence)
         broadcast_as_bytes = [
-            zigpy.types.uint8_t(b) for b in broadcast_address.to_bytes(8, "big")
+            zigpy.types.uint8_t(b) for b in broadcast_address.to_bytes(8, "little")
         ]
         request = self._api.tx_explicit(
-            zigpy.types.EUI64(broadcast_as_bytes),
+            EUI64(broadcast_as_bytes),
             broadcast_address,
             src_ep,
             dst_ep,

@@ -127,7 +127,7 @@ class EUI64(zigpy.types.EUI64):
 
     def serialize(self):
         assert self._length == len(self)
-        return b"".join([i.serialize() for i in self])
+        return super().serialize()[::-1]
 
 
 class UndefinedEnumMeta(enum.EnumMeta):
