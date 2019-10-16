@@ -11,7 +11,7 @@ def test_deserialize():
     assert rest == extra
     assert result[0] == 0xFF
     assert result[1] == -2
-    assert result[2] == t.EUI64((0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37))
+    assert result[2] == t.EUI64((0x37, 0x36, 0x35, 0x34, 0x33, 0x32, 0x31, 0x30))
 
 
 def test_serialize():
@@ -19,7 +19,7 @@ def test_serialize():
     schema = (t.uint8_t, t.int16s, t.EUI64)
     result = t.serialize(data, schema)
 
-    assert result == b"\xff\xff\xfe01234567"
+    assert result == b"\xff\xff\xfe76543210"
 
 
 def test_bytes_serialize():
