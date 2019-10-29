@@ -134,6 +134,48 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             state = await self._api._at_command("AI")
         return state
 
+    async def mrequest(
+        self,
+        group_id,
+        profile,
+        cluster,
+        src_ep,
+        sequence,
+        data,
+        *,
+        hops=0,
+        non_member_radius=3
+    ):
+        """Submit and send data out as a multicast transmission.
+        :param group_id: destination multicast address
+        :param profile: Zigbee Profile ID to use for outgoing message
+        :param cluster: cluster id where the message is being sent
+        :param src_ep: source endpoint id
+        :param sequence: transaction sequence number of the message
+        :param data: Zigbee message payload
+        :param hops: the message will be delivered to all nodes within this number of
+                     hops of the sender. A value of zero is converted to MAX_HOPS
+        :param non_member_radius: the number of hops that the message will be forwarded
+                                  by devices that are not members of the group. A value
+                                  of 7 or greater is treated as infinite
+        :returns: return a tuple of a status and an error_message. Original requestor
+                  has more context to provide a more meaningful error message
+        """
+        LOGGER.debug("Zigbee request tsn #%s: %s", sequence, binascii.hexlify(data))
+
+        send_req = self._api.tx_explicit(
+            UNKNOWN_IEEE, group_id, src_ep, cluster, profile, hops, 0x28, data
+        )
+
+        try:
+            v = await asyncio.wait_for(send_req, timeout=TIMEOUT_TX_STATUS)
+        except asyncio.TimeoutError:
+            return TXStatus.NETWORK_ACK_FAILURE, "Timeout waiting for ACK"
+
+        if v != TXStatus.SUCCESS:
+            return v, "Error sending tsn #%s: %s".format(sequence, v.name)
+        return v, "Successfully sent tsn #%s: %s".format(sequence, v.name)
+
     async def request(
         self,
         device,
