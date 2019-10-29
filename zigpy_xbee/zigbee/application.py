@@ -164,7 +164,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         LOGGER.debug("Zigbee request tsn #%s: %s", sequence, binascii.hexlify(data))
 
         send_req = self._api.tx_explicit(
-            UNKNOWN_IEEE, group_id, src_ep, cluster, profile, hops, 0x28, data
+            UNKNOWN_IEEE, group_id, src_ep, src_ep, cluster, profile, hops, 0x08, data
         )
 
         try:

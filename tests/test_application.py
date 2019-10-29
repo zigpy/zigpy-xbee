@@ -547,3 +547,40 @@ def test_rx_device_annce(app, ieee, nwk):
     assert app.handle_join.call_args[0][0] == nwk
     assert app.handle_join.call_args[0][1] == ieee
     assert app.handle_join.call_args[0][2] == 0
+
+
+async def _test_mrequest(app, send_success=True, send_timeout=False, **kwargs):
+    seq = 123
+    group_id = 0x2345
+
+    def _mock_command(
+        cmdname, ieee, nwk, src_ep, dst_ep, cluster, profile, radius, options, data
+    ):
+        send_fut = asyncio.Future()
+        if not send_timeout:
+            if send_success:
+                send_fut.set_result(xbee_t.TXStatus.SUCCESS)
+            else:
+                send_fut.set_result(xbee_t.TXStatus.ADDRESS_NOT_FOUND)
+        return send_fut
+
+    app._api._command = mock.MagicMock(side_effect=_mock_command)
+    return await app.mrequest(group_id, 0x0260, 1, 2, seq, b"\xaa\x55\xbe\xef")
+
+
+@pytest.mark.asyncio
+async def test_mrequest_with_reply(app):
+    r = await _test_mrequest(app, send_success=True)
+    assert r[0] == 0
+
+
+@pytest.mark.asyncio
+async def test_mrequest_send_timeout(app):
+    r = await _test_mrequest(app, send_timeout=True)
+    assert r[0] != 0
+
+
+@pytest.mark.asyncio
+async def test_mrequest_send_fail(app):
+    r = await _test_mrequest(app, send_success=False)
+    assert r[0] != 0
