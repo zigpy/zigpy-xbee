@@ -320,7 +320,7 @@ class XBee:
             LOGGER.error("No '%s' handler. Data: %s", command, binascii.hexlify(data))
 
     def _handle_at_response(self, frame_id, cmd, status, value):
-        fut, = self._awaiting.pop(frame_id)
+        (fut,) = self._awaiting.pop(frame_id)
         try:
             status = ATCommandResult(status)
         except ValueError:
@@ -391,7 +391,7 @@ class XBee:
             frame_id,
         )
         try:
-            fut, = self._awaiting.pop(frame_id)
+            (fut,) = self._awaiting.pop(frame_id)
         except KeyError:
             LOGGER.debug("unexpected tx_status report received")
             return
