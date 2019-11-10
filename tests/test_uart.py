@@ -67,17 +67,17 @@ def test_close(gw):
 
 
 def test_data_received_chunk_frame(gw):
-    data = b"~\x00\x07\x8b\x0e\xff\xfd\x00$\x02D"
+    data = b"~\x00\r\x88\rID\x00\x00\x00\x00\x00\x00\x00\x00\x00\xdd"
     gw.frame_received = mock.MagicMock()
-    gw.data_received(data[:-4])
+    gw.data_received(data[:3])
     assert gw.frame_received.call_count == 0
-    gw.data_received(data[-4:])
+    gw.data_received(data[3:])
     assert gw.frame_received.call_count == 1
     assert gw.frame_received.call_args[0][0] == data[3:-1]
 
 
 def test_data_received_full_frame(gw):
-    data = b"~\x00\x07\x8b\x0e\xff\xfd\x00$\x02D"
+    data = b"~\x00\r\x88\rID\x00\x00\x00\x00\x00\x00\x00\x00\x00\xdd"
     gw.frame_received = mock.MagicMock()
     gw.data_received(data)
     assert gw.frame_received.call_count == 1
