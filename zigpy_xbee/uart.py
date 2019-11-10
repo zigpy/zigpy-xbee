@@ -19,6 +19,7 @@ class Gateway(asyncio.Protocol):
         self._buffer = b""
         self._connected_future = connected_future
         self._api = api
+        self._in_command_mode = False
 
     def send(self, data):
         """Send data, taking care of escaping and framing"""
@@ -64,6 +65,7 @@ class Gateway(asyncio.Protocol):
     def command_mode_send(self, data):
         """Send data in command mode."""
         LOGGER.debug("Command mode sending %s to uart", data)
+        self._in_command_mode = True
         self._transport.write(data)
 
     def data_received(self, data):
@@ -74,7 +76,7 @@ class Gateway(asyncio.Protocol):
             if frame is None:
                 break
             self.frame_received(frame)
-        if self._buffer[-1:] == b"\r":
+        if self._in_command_mode and self._buffer[-1:] == b"\r":
             rsp, self._buffer = (self._buffer[:-1], b"")
             self.command_mode_rsp(rsp)
 
@@ -85,6 +87,10 @@ class Gateway(asyncio.Protocol):
 
     def close(self):
         self._transport.close()
+
+    def reset_command_mode(self):
+        """Reset command mode and ignore \r character as command mode response."""
+        self._in_command_mode = False
 
     def _extract_frame(self):
         first_start = self._buffer.find(self.START)
