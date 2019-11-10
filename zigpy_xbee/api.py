@@ -449,11 +449,11 @@ class XBee:
             cmds.insert(0, bd)
 
         for cmd in cmds:
-            if await self.command_mode_at_cmd(cmd + "\r"):
-                LOGGER.debug("Successfuly sent %s cmd", cmd)
-            else:
+            if not await self.command_mode_at_cmd(cmd + "\r"):
                 LOGGER.debug("No response to %s cmd", cmd)
                 return None
+            LOGGER.debug("Successfuly sent %s cmd", cmd)
+        self._uart.reset_command_mode()
         return True
 
     async def init_api_mode(self):
