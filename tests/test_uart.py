@@ -67,17 +67,17 @@ def test_close(gw):
 
 
 def test_data_received_chunk_frame(gw):
-    data = b"~\x00\x07\x8b\x0e\xff\xfd\x00$\x02D"
+    data = b"~\x00\r\x88\rID\x00\x00\x00\x00\x00\x00\x00\x00\x00\xdd"
     gw.frame_received = mock.MagicMock()
-    gw.data_received(data[:-4])
+    gw.data_received(data[:3])
     assert gw.frame_received.call_count == 0
-    gw.data_received(data[-4:])
+    gw.data_received(data[3:])
     assert gw.frame_received.call_count == 1
     assert gw.frame_received.call_args[0][0] == data[3:-1]
 
 
 def test_data_received_full_frame(gw):
-    data = b"~\x00\x07\x8b\x0e\xff\xfd\x00$\x02D"
+    data = b"~\x00\r\x88\rID\x00\x00\x00\x00\x00\x00\x00\x00\x00\xdd"
     gw.frame_received = mock.MagicMock()
     gw.data_received(data)
     assert gw.frame_received.call_count == 1
@@ -91,14 +91,28 @@ def test_data_received_incomplete_frame(gw):
     assert gw.frame_received.call_count == 0
 
 
-def test_data_received_at_response(gw):
+def test_data_received_at_response_non_cmd_mode(gw):
     data = b"OK\x0D"
     gw.frame_received = mock.MagicMock()
     gw.command_mode_rsp = mock.MagicMock()
 
     gw.data_received(data)
+    assert gw.command_mode_rsp.call_count == 0
+
+
+def test_data_received_at_response_in_cmd_mode(gw):
+    data = b"OK\x0D"
+    gw.frame_received = mock.MagicMock()
+    gw.command_mode_rsp = mock.MagicMock()
+
+    gw.command_mode_send(b"")
+    gw.data_received(data)
     assert gw.command_mode_rsp.call_count == 1
     assert gw.command_mode_rsp.call_args[0][0] == b"OK"
+
+    gw.reset_command_mode()
+    gw.data_received(data)
+    assert gw.command_mode_rsp.call_count == 1
 
 
 def test_extract(gw):

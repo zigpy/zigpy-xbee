@@ -320,7 +320,7 @@ class XBee:
             LOGGER.error("No '%s' handler. Data: %s", command, binascii.hexlify(data))
 
     def _handle_at_response(self, frame_id, cmd, status, value):
-        fut, = self._awaiting.pop(frame_id)
+        (fut,) = self._awaiting.pop(frame_id)
         try:
             status = ATCommandResult(status)
         except ValueError:
@@ -391,7 +391,7 @@ class XBee:
             frame_id,
         )
         try:
-            fut, = self._awaiting.pop(frame_id)
+            (fut,) = self._awaiting.pop(frame_id)
         except KeyError:
             LOGGER.debug("unexpected tx_status report received")
             return
@@ -449,11 +449,11 @@ class XBee:
             cmds.insert(0, bd)
 
         for cmd in cmds:
-            if await self.command_mode_at_cmd(cmd + "\r"):
-                LOGGER.debug("Successfuly sent %s cmd", cmd)
-            else:
+            if not await self.command_mode_at_cmd(cmd + "\r"):
                 LOGGER.debug("No response to %s cmd", cmd)
                 return None
+            LOGGER.debug("Successfuly sent %s cmd", cmd)
+        self._uart.reset_command_mode()
         return True
 
     async def init_api_mode(self):
