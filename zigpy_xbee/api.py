@@ -175,6 +175,8 @@ AT_COMMANDS = {
     "%V": t.uint16_t,  # read only
     "V+": t.uint16_t,
     "TP": t.uint16_t,
+    "M0": t.uint16_t,  # 0 - 0x3FF
+    "M1": t.uint16_t,  # 0 - 0x3FF
     # Diagnostics commands
     "VR": t.uint16_t,
     "HV": t.uint16_t,
