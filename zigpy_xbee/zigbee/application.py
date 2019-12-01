@@ -331,7 +331,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             cluster,
             profile,
             radius,
-            0x20,
+            0x00,
             data,
         )
         try:
