@@ -60,7 +60,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._ieee = zigpy.types.EUI64(ieee)
         LOGGER.debug("Read local IEEE address as %s", self._ieee)
 
-        association_state = await self._get_association_state()
+        association_state = await self._api._at_command("AI")
         self._nwk = await self._api._at_command("MY")
         enc_enabled = await self._api._at_command("EE")
         enc_options = await self._api._at_command("EO")
