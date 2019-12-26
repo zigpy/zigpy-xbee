@@ -60,7 +60,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._ieee = zigpy.types.EUI64(ieee)
         LOGGER.debug("Read local IEEE address as %s", self._ieee)
 
-        association_state = await self._get_association_state()
+        try:
+            association_state = await asyncio.wait_for(
+                self._get_association_state(), timeout=4
+            )
+        except asyncio.TimeoutError:
+            association_state = 0xFF
         self._nwk = await self._api._at_command("MY")
         enc_enabled = await self._api._at_command("EE")
         enc_options = await self._api._at_command("EO")
@@ -120,7 +125,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._api._at_command("WR")
 
         await asyncio.wait_for(self._api.coordinator_started_event.wait(), timeout=10)
-        association_state = await self._get_association_state()
+        association_state = await asyncio.wait_for(
+            self._get_association_state(), timeout=10
+        )
         LOGGER.debug("Association state: %s", association_state)
         self._nwk = await self._api._at_command("MY")
         assert self._nwk == 0x0000
@@ -204,7 +211,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         """
         LOGGER.debug("Zigbee request tsn #%s: %s", sequence, binascii.hexlify(data))
 
-        tx_opts = 0x20
+        tx_opts = 0x00
         if expect_reply and device.node_desc.is_end_device in (True, None):
             tx_opts |= 0x40
         send_req = self._api.tx_explicit(
@@ -331,7 +338,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             cluster,
             profile,
             radius,
-            0x20,
+            0x00,
             data,
         )
         try:
