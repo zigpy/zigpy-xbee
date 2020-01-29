@@ -99,7 +99,7 @@ COMMAND_RESPONSES = {
     "node_id_indicator": (0x95, (), None),
 }
 
-# https://www.digi.com/resources/documentation/digidocs/PDFs/90000976.pdf pg 157
+# https://www.digi.com/resources/documentation/digidocs/pdfs/90001539.pdf pg 175
 AT_COMMANDS = {
     # Addressing commands
     "DH": t.uint32_t,
@@ -153,15 +153,13 @@ AT_COMMANDS = {
     "NB": t.uint8_t,  # 0 - 3 (an Enum)
     "SB": t.uint8_t,  # 0 - 1 (an Enum)
     "RO": t.uint8_t,
-    "D7": t.uint8_t,  # 0 - 7 (an Enum)
     "D6": t.uint8_t,  # 0 - 5 (an Enum)
+    "D7": t.uint8_t,  # 0 - 7 (an Enum)
+    "P3": t.uint8_t,  # 0 - 5 (an Enum)
+    "P4": t.uint8_t,  # 0 - 5 (an Enum)
     # I/O commands
     "IR": t.uint16_t,
     "IC": t.uint16_t,
-    "P0": t.uint8_t,  # 0 - 5 (an Enum)
-    "P1": t.uint8_t,  # 0 - 5 (an Enum)
-    "P2": t.uint8_t,  # 0 - 5 (an Enum)
-    "P3": t.uint8_t,  # 0 - 5 (an Enum)
     "D0": t.uint8_t,  # 0 - 5 (an Enum)
     "D1": t.uint8_t,  # 0 - 5 (an Enum)
     "D2": t.uint8_t,  # 0 - 5 (an Enum)
@@ -169,6 +167,15 @@ AT_COMMANDS = {
     "D4": t.uint8_t,  # 0 - 5 (an Enum)
     "D5": t.uint8_t,  # 0 - 5 (an Enum)
     "D8": t.uint8_t,  # 0 - 5 (an Enum)
+    "D9": t.uint8_t,  # 0 - 5 (an Enum)
+    "P0": t.uint8_t,  # 0 - 5 (an Enum)
+    "P1": t.uint8_t,  # 0 - 5 (an Enum)
+    "P2": t.uint8_t,  # 0 - 5 (an Enum)
+    "P5": t.uint8_t,  # 0 - 5 (an Enum)
+    "P6": t.uint8_t,  # 0 - 5 (an Enum)
+    "P7": t.uint8_t,  # 0 - 5 (an Enum)
+    "P8": t.uint8_t,  # 0 - 5 (an Enum)
+    "P9": t.uint8_t,  # 0 - 5 (an Enum)
     "LT": t.uint8_t,
     "PR": t.uint16_t,
     "RP": t.uint8_t,
