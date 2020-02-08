@@ -11,7 +11,7 @@ import zigpy.util
 from zigpy.zcl.clusters.general import Groups
 from zigpy.zdo.types import NodeDescriptor, ZDOCmd
 
-from zigpy_xbee.types import EUI64, TXStatus, UNKNOWN_IEEE, UNKNOWN_NWK
+from zigpy_xbee.types import EUI64, TXStatus, BROADCAST_IEEE, UNKNOWN_IEEE, UNKNOWN_NWK
 
 
 # how long coordinator would hold message for an end device in 10ms units
@@ -171,7 +171,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         LOGGER.debug("Zigbee request tsn #%s: %s", sequence, binascii.hexlify(data))
 
         send_req = self._api.tx_explicit(
-            UNKNOWN_IEEE, group_id, src_ep, src_ep, cluster, profile, hops, 0x08, data
+            BROADCAST_IEEE, group_id, src_ep, src_ep, cluster, profile, hops, 0x08, data
         )
 
         try:
