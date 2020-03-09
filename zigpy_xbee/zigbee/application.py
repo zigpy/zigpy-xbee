@@ -1,18 +1,18 @@
 import asyncio
 import binascii
 import logging
+import time
 
 import zigpy.application
-import zigpy.exceptions
 import zigpy.device
+import zigpy.exceptions
 import zigpy.quirks
 import zigpy.types
 import zigpy.util
 from zigpy.zcl.clusters.general import Groups
 from zigpy.zdo.types import NodeDescriptor, ZDOCmd
 
-from zigpy_xbee.types import EUI64, TXStatus, UNKNOWN_IEEE, UNKNOWN_NWK
-
+from zigpy_xbee.types import EUI64, UNKNOWN_IEEE, UNKNOWN_NWK, TXStatus
 
 # how long coordinator would hold message for an end device in 10ms units
 CONF_CYCLIC_SLEEP_PERIOD = 0x0300
@@ -97,6 +97,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             LOGGER.debug("sending CE command: %s", exc)
 
         dev = zigpy.device.Device(self, self.ieee, self.nwk)
+        dev.status = zigpy.device.Status.ENDPOINTS_INIT
         dev.add_endpoint(XBEE_ENDPOINT_ID)
         self.listener_event("raw_device_initialized", dev)
         xbee_dev = XBeeCoordinator(self, self.ieee, self.nwk, dev)
@@ -283,6 +284,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 )
             self.handle_join(nwk, ieee, 0)
 
+        try:
+            self.devices[self.ieee].last_seen = time.time()
+        except KeyError:
+            pass
         try:
             device = self.get_device(nwk=src_nwk)
         except KeyError:
