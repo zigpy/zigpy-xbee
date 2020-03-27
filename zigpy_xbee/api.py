@@ -7,8 +7,7 @@ import logging
 from zigpy.exceptions import DeliveryError
 from zigpy.types import LVList
 
-from . import uart
-from . import types as t
+from . import types as t, uart
 
 LOGGER = logging.getLogger(__name__)
 

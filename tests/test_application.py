@@ -2,7 +2,6 @@ import asyncio
 from unittest import mock
 
 import pytest
-
 from zigpy import types as t
 from zigpy.zdo.types import ZDOCmd
 

@@ -1,7 +1,7 @@
 import asyncio
 import logging
-import serial
 
+import serial
 import serial_asyncio
 
 LOGGER = logging.getLogger(__name__)
