@@ -4,6 +4,7 @@ import enum
 import functools
 import logging
 
+import serial
 from zigpy.exceptions import APIException, DeliveryError
 from zigpy.types import LVList
 
@@ -13,6 +14,7 @@ LOGGER = logging.getLogger(__name__)
 
 AT_COMMAND_TIMEOUT = 2
 REMOTE_AT_COMMAND_TIMEOUT = 30
+PROBE_TIMEOUT = 45
 
 
 class ModemStatus(t.uint8_t, t.UndefinedEnum):
@@ -480,9 +482,9 @@ class XBee:
         fut = self._cmd_mode_future
         if fut is None or fut.done():
             return
-        if data == "OK":
+        if "OK" in data:
             fut.set_result(True)
-        elif data == "ERROR":
+        elif "ERROR" in data:
             fut.set_result(False)
         else:
             fut.set_result(data)
@@ -547,6 +549,32 @@ class XBee:
             )
         )
         return False
+
+    @classmethod
+    async def probe(cls, device: str, baudrate: int) -> bool:
+        """Probe port for the device presence."""
+        api = cls()
+        try:
+            await asyncio.wait_for(api._probe(device, baudrate), timeout=PROBE_TIMEOUT)
+            return True
+        except (asyncio.TimeoutError, serial.SerialException, APIException) as exc:
+            LOGGER.debug("Unsuccessful radio probe of '%s' port", exc_info=exc)
+        finally:
+            api.close()
+
+        return False
+
+    async def _probe(self, device: str, baudrate: int) -> None:
+        """Open port and try sending a command"""
+        await self.connect(device, baudrate)
+        try:
+            # Ensure we have escaped commands
+            await self._at_command("AP", 2)
+        except asyncio.TimeoutError:
+            if not await self.init_api_mode():
+                raise APIException("Failed to configure XBee for API mode")
+        finally:
+            self.close()
 
     def __getattr__(self, item):
         if item in COMMAND_REQUESTS:

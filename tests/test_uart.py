@@ -48,13 +48,6 @@ def test_command_mode_rsp(gw):
     assert gw._api.handle_command_mode_rsp.call_args[0][0] == "OK"
 
 
-def test_command_mode_rsp_decode_exc(gw):
-    data = b"OK\x81"
-    with pytest.raises(UnicodeDecodeError):
-        gw.command_mode_rsp(data)
-    assert gw._api.handle_command_mode_rsp.call_count == 0
-
-
 def test_command_mode_send(gw):
     data = b"ATAP2\x0D"
     gw.command_mode_send(data)

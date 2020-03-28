@@ -3,6 +3,7 @@ import logging
 
 from asynctest import CoroutineMock, mock
 import pytest
+import serial
 import zigpy.exceptions
 
 from zigpy_xbee import api as xbee_api, types as t, uart
@@ -588,3 +589,80 @@ async def test_reconnect_multiple_attempts(monkeypatch, caplog):
 
     assert api._uart is mock.sentinel.uart_reconnect
     assert connect_mock.call_count == 3
+
+
+@pytest.mark.asyncio
+@mock.patch.object(xbee_api.XBee, "_at_command", new_callable=CoroutineMock)
+@mock.patch.object(uart, "connect")
+async def test_probe_success(mock_connect, mock_at_cmd):
+    """Test device probing."""
+
+    res = await xbee_api.XBee.probe(mock.sentinel.uart, mock.sentinel.baud)
+    assert res is True
+    assert mock_connect.call_count == 1
+    assert mock_connect.await_count == 1
+    assert mock_connect.call_args[0][0] is mock.sentinel.uart
+    assert mock_at_cmd.call_count == 1
+    assert mock_connect.return_value.close.call_count == 1
+
+
+@pytest.mark.asyncio
+@mock.patch.object(xbee_api.XBee, "init_api_mode", return_value=True)
+@mock.patch.object(xbee_api.XBee, "_at_command", side_effect=asyncio.TimeoutError)
+@mock.patch.object(uart, "connect")
+async def test_probe_success_api_mode(mock_connect, mock_at_cmd, mock_api_mode):
+    """Test device probing."""
+
+    res = await xbee_api.XBee.probe(mock.sentinel.uart, mock.sentinel.baud)
+    assert res is True
+    assert mock_connect.call_count == 1
+    assert mock_connect.await_count == 1
+    assert mock_connect.call_args[0][0] is mock.sentinel.uart
+    assert mock_at_cmd.call_count == 1
+    assert mock_api_mode.call_count == 1
+    assert mock_connect.return_value.close.call_count == 1
+
+
+@pytest.mark.asyncio
+@mock.patch.object(xbee_api.XBee, "init_api_mode")
+@mock.patch.object(xbee_api.XBee, "_at_command", side_effect=asyncio.TimeoutError)
+@mock.patch.object(uart, "connect")
+@pytest.mark.parametrize(
+    "exception",
+    (asyncio.TimeoutError, serial.SerialException, zigpy.exceptions.APIException),
+)
+async def test_probe_fail(mock_connect, mock_at_cmd, mock_api_mode, exception):
+    """Test device probing fails."""
+
+    mock_api_mode.side_effect = exception
+    mock_api_mode.reset_mock()
+    mock_at_cmd.reset_mock()
+    mock_connect.reset_mock()
+    res = await xbee_api.XBee.probe(mock.sentinel.uart, mock.sentinel.baud)
+    assert res is False
+    assert mock_connect.call_count == 1
+    assert mock_connect.await_count == 1
+    assert mock_connect.call_args[0][0] is mock.sentinel.uart
+    assert mock_at_cmd.call_count == 1
+    assert mock_api_mode.call_count == 1
+    assert mock_connect.return_value.close.call_count == 1
+
+
+@pytest.mark.asyncio
+@mock.patch.object(xbee_api.XBee, "init_api_mode", return_value=False)
+@mock.patch.object(xbee_api.XBee, "_at_command", side_effect=asyncio.TimeoutError)
+@mock.patch.object(uart, "connect")
+async def test_probe_fail_api_mode(mock_connect, mock_at_cmd, mock_api_mode):
+    """Test device probing fails."""
+
+    mock_api_mode.reset_mock()
+    mock_at_cmd.reset_mock()
+    mock_connect.reset_mock()
+    res = await xbee_api.XBee.probe(mock.sentinel.uart, mock.sentinel.baud)
+    assert res is False
+    assert mock_connect.call_count == 1
+    assert mock_connect.await_count == 1
+    assert mock_connect.call_args[0][0] is mock.sentinel.uart
+    assert mock_at_cmd.call_count == 1
+    assert mock_api_mode.call_count == 1
+    assert mock_connect.return_value.close.call_count == 1
