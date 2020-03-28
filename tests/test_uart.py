@@ -1,3 +1,4 @@
+import asyncio
 from unittest import mock
 
 import pytest
@@ -45,13 +46,6 @@ def test_command_mode_rsp(gw):
     gw.command_mode_rsp(data)
     assert gw._api.handle_command_mode_rsp.call_count == 1
     assert gw._api.handle_command_mode_rsp.call_args[0][0] == "OK"
-
-
-def test_command_mode_rsp_decode_exc(gw):
-    data = b"OK\x81"
-    with pytest.raises(UnicodeDecodeError):
-        gw.command_mode_rsp(data)
-    assert gw._api.handle_command_mode_rsp.call_count == 0
 
 
 def test_command_mode_send(gw):
@@ -202,3 +196,24 @@ def test_unescape_underflow(gw):
     unescaped, rest = gw._get_unescaped(escaped, 3)
     assert unescaped is None
     assert rest is None
+
+
+def test_connection_lost_exc(gw):
+    gw._connected_future = asyncio.Future()
+
+    gw.connection_lost(ValueError())
+
+    conn_lost = gw._api.connection_lost
+    assert conn_lost.call_count == 1
+    assert isinstance(conn_lost.call_args[0][0], Exception)
+    assert gw._connected_future.done()
+    assert gw._connected_future.exception()
+
+
+def test_connection_closed(gw):
+    gw._connected_future = asyncio.Future()
+    gw.connection_lost(None)
+
+    assert gw._api.connection_lost.call_count == 0
+    assert gw._connected_future.done()
+    assert gw._connected_future.result() is True

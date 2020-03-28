@@ -1,4 +1,5 @@
 import pytest
+
 from zigpy_xbee import types as t
 
 
