@@ -14,6 +14,7 @@ class Gateway(asyncio.Protocol):
     XOFF = b"\x13"
 
     RESERVED = START + ESCAPE + XON + XOFF
+    THIS_ONE = True
 
     def __init__(self, api, connected_future=None):
         self._buffer = b""
@@ -44,6 +45,20 @@ class Gateway(asyncio.Protocol):
             raise ValueError(
                 "baudrate must be one of {}".format(self._transport.serial.BAUDRATES)
             )
+
+    def connection_lost(self, exc) -> None:
+        """Port was closed expectedly or unexpectedly."""
+        if self._connected_future and not self._connected_future.done():
+            if exc is None:
+                self._connected_future.set_result(True)
+            else:
+                self._connected_future.set_exception(exc)
+        if exc is None:
+            LOGGER.debug("Closed serial connection")
+            return
+
+        LOGGER.error("Lost serial connection: %s", exc)
+        self._api.connection_lost(exc)
 
     def connection_made(self, transport):
         """Callback when the uart is connected"""
