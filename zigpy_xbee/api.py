@@ -482,9 +482,9 @@ class XBee:
         fut = self._cmd_mode_future
         if fut is None or fut.done():
             return
-        if data == "OK":
+        if "OK" in data:
             fut.set_result(True)
-        elif data == "ERROR":
+        elif "ERROR" in data:
             fut.set_result(False)
         else:
             fut.set_result(data)
