@@ -29,12 +29,12 @@ These are XBee Zigbee based radios that have been tested with the [zigpy-xbee](h
 - Digi XBee Series 2 (S2) modules. Note: These will need to be manually flashed with the Zigbee Coordinator API firmware via XCTU.
 - Digi XBee Series 3 (xbee3-24) modules
 
-# Releases of zigpy-xbee-homeassistant via PyPI
-Tagged versions of zigpy-xbee-homeassistant are also released via PyPI
+# Releases of zigpy-xbee via PyPI
+Tagged versions of zigpy-xbee are also released via PyPI
 
-- https://pypi.org/project/zigpy-xbee-homeassistant/
-- https://pypi.org/project/zigpy-xbee-homeassistant/#history
-- https://pypi.org/project/zigpy-xbee-homeassistant/#files
+- https://pypi.org/project/zigpy-xbee/
+- https://pypi.org/project/zigpy-xbee/#history
+- https://pypi.org/project/zigpy-xbee/#files
 
 # How to contribute
 
