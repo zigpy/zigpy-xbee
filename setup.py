@@ -11,7 +11,7 @@ with open(os.path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
-    name="zigpy-xbee-homeassistant",
+    name="zigpy-xbee",
     version=zigpy_xbee.__version__,
     description="A library which communicates with XBee radios for zigpy",
     long_description=long_description,
