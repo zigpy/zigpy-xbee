@@ -3,10 +3,19 @@ import binascii
 import enum
 import functools
 import logging
+from typing import Any, Dict, Optional
 
 import serial
 from zigpy.exceptions import APIException, DeliveryError
 from zigpy.types import LVList
+
+from zigpy_xbee.config import (
+    CONF_DEVICE,
+    CONF_DEVICE_BAUDRATE,
+    CONF_DEVICE_PATH,
+    SCHEMA_DEVICE,
+)
+import zigpy_xbee.zigbee.application
 
 from . import types as t, uart
 
@@ -243,17 +252,17 @@ class ATCommandResult(enum.IntEnum):
 
 
 class XBee:
-    def __init__(self):
-        self._uart = None
-        self._uart_params = None
-        self._seq = 1
+    def __init__(self, device_config: Dict[str, Any]) -> None:
+        self._config = device_config
+        self._uart: Optional[uart.Gateway] = None
+        self._seq: int = 1
         self._commands_by_id = {v[0]: k for k, v in COMMAND_RESPONSES.items()}
         self._awaiting = {}
         self._app = None
-        self._cmd_mode_future = None
-        self._conn_lost_task = None
-        self._reset = asyncio.Event()
-        self._running = asyncio.Event()
+        self._cmd_mode_future: Optional[asyncio.Future] = None
+        self._conn_lost_task: Optional[asyncio.Task] = None
+        self._reset: asyncio.Event = asyncio.Event()
+        self._running: asyncio.Event = asyncio.Event()
 
     @property
     def reset_event(self):
@@ -270,24 +279,37 @@ class XBee:
         """Return true if coordinator is running."""
         return self.coordinator_started_event.is_set()
 
-    async def connect(self, device: str, baudrate: int = 115200) -> None:
+    @classmethod
+    async def new(
+        cls,
+        application: zigpy_xbee.zigbee.application.ControllerApplication,
+        config: Dict[str, Any],
+    ) -> "XBee":
+        """Create new instance from """
+        xbee_api = cls(config[CONF_DEVICE])
+        await xbee_api.connect()
+        xbee_api.set_application(application)
+        return xbee_api
+
+    async def connect(self) -> None:
         assert self._uart is None
-        self._uart = await uart.connect(device, baudrate, self)
-        self._uart_params = (device, baudrate)
+        self._uart = await uart.connect(self._config, self)
 
     def reconnect(self):
         """Reconnect using saved parameters."""
         LOGGER.debug(
             "Reconnecting '%s' serial port using %s",
-            self._uart_params[0],
-            self._uart_params[1],
+            self._config[CONF_DEVICE_PATH],
+            self._config[CONF_DEVICE_BAUDRATE],
         )
-        return self.connect(self._uart_params[0], self._uart_params[1])
+        return self.connect()
 
     def connection_lost(self, exc: Exception) -> None:
         """Lost serial connection."""
         LOGGER.warning(
-            "Serial '%s' connection lost unexpectedly: %s", self._uart_params[0], exc
+            "Serial '%s' connection lost unexpectedly: %s",
+            self._config[CONF_DEVICE_PATH],
+            exc,
         )
         self._uart = None
         if self._conn_lost_task and not self._conn_lost_task.done():
@@ -312,7 +334,7 @@ class XBee:
                 attempt += 1
                 LOGGER.debug(
                     "Couldn't re-open '%s' serial port, retrying in %ss: %s",
-                    self._uart_params[0],
+                    self._config[CONF_DEVICE_PATH],
                     wait,
                     str(exc),
                 )
@@ -320,7 +342,7 @@ class XBee:
 
         LOGGER.debug(
             "Reconnected '%s' serial port after %s attempts",
-            self._uart_params[0],
+            self._config[CONF_DEVICE_PATH],
             attempt,
         )
 
@@ -551,22 +573,26 @@ class XBee:
         return False
 
     @classmethod
-    async def probe(cls, device: str, baudrate: int) -> bool:
+    async def probe(cls, device_config: Dict[str, Any]) -> bool:
         """Probe port for the device presence."""
-        api = cls()
+        api = cls(SCHEMA_DEVICE(device_config))
         try:
-            await asyncio.wait_for(api._probe(device, baudrate), timeout=PROBE_TIMEOUT)
+            await asyncio.wait_for(api._probe(), timeout=PROBE_TIMEOUT)
             return True
         except (asyncio.TimeoutError, serial.SerialException, APIException) as exc:
-            LOGGER.debug("Unsuccessful radio probe of '%s' port", exc_info=exc)
+            LOGGER.debug(
+                "Unsuccessful radio probe of '%s' port",
+                device_config[CONF_DEVICE_PATH],
+                exc_info=exc,
+            )
         finally:
             api.close()
 
         return False
 
-    async def _probe(self, device: str, baudrate: int) -> None:
+    async def _probe(self) -> None:
         """Open port and try sending a command"""
-        await self.connect(device, baudrate)
+        await self.connect()
         try:
             # Ensure we have escaped commands
             await self._at_command("AP", 2)
