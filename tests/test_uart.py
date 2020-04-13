@@ -5,6 +5,11 @@ import pytest
 import serial_asyncio
 
 from zigpy_xbee import uart
+import zigpy_xbee.config
+
+DEVICE_CONFIG = zigpy_xbee.config.SCHEMA_DEVICE(
+    {zigpy_xbee.config.CONF_DEVICE_PATH: "/dev/null"}
+)
 
 
 @pytest.fixture
@@ -29,7 +34,6 @@ def test_baudrate_fail(gw):
 @pytest.mark.asyncio
 async def test_connect(monkeypatch):
     api = mock.MagicMock()
-    portmock = mock.MagicMock()
 
     async def mock_conn(loop, protocol_factory, **kwargs):
         protocol = protocol_factory()
@@ -38,7 +42,7 @@ async def test_connect(monkeypatch):
 
     monkeypatch.setattr(serial_asyncio, "create_serial_connection", mock_conn)
 
-    await uart.connect(portmock, 57600, api)
+    await uart.connect(DEVICE_CONFIG, api)
 
 
 def test_command_mode_rsp(gw):
