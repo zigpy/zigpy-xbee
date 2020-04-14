@@ -9,12 +9,7 @@ import serial
 from zigpy.exceptions import APIException, DeliveryError
 from zigpy.types import LVList
 
-from zigpy_xbee.config import (
-    CONF_DEVICE,
-    CONF_DEVICE_BAUDRATE,
-    CONF_DEVICE_PATH,
-    SCHEMA_DEVICE,
-)
+from zigpy_xbee.config import CONF_DEVICE_BAUDRATE, CONF_DEVICE_PATH, SCHEMA_DEVICE
 import zigpy_xbee.zigbee.application
 
 from . import types as t, uart
@@ -286,7 +281,7 @@ class XBee:
         config: Dict[str, Any],
     ) -> "XBee":
         """Create new instance from """
-        xbee_api = cls(config[CONF_DEVICE])
+        xbee_api = cls(config)
         await xbee_api.connect()
         xbee_api.set_application(application)
         return xbee_api

@@ -672,9 +672,7 @@ async def test_probe_fail_api_mode(mock_connect, mock_at_cmd, mock_api_mode):
 @mock.patch.object(xbee_api.XBee, "connect")
 async def test_xbee_new(conn_mck):
     """Test new class method."""
-    api = await xbee_api.XBee.new(
-        mock.sentinel.application, {zigpy_xbee.config.CONF_DEVICE: DEVICE_CONFIG}
-    )
+    api = await xbee_api.XBee.new(mock.sentinel.application, DEVICE_CONFIG)
     assert isinstance(api, xbee_api.XBee)
     assert conn_mck.call_count == 1
     assert conn_mck.await_count == 1
