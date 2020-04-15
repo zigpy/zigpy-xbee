@@ -1,21 +1,34 @@
 import asyncio
-from unittest import mock
 
+from asynctest import CoroutineMock, mock
 import pytest
 from zigpy import types as t
 from zigpy.zdo.types import ZDOCmd
 
 from zigpy_xbee.api import ModemStatus, XBee
+import zigpy_xbee.config as config
 import zigpy_xbee.types as xbee_t
 from zigpy_xbee.zigbee import application
 
+APP_CONFIG = {
+    config.CONF_DEVICE: {
+        config.CONF_DEVICE_PATH: "/dev/null",
+        config.CONF_DEVICE_BAUDRATE: 115200,
+    },
+    config.CONF_DATABASE: None,
+}
+
 
 @pytest.fixture
-def app(monkeypatch, database_file=None):
+def app(monkeypatch):
     monkeypatch.setattr(application, "TIMEOUT_TX_STATUS", 0.1)
     monkeypatch.setattr(application, "TIMEOUT_REPLY", 0.1)
     monkeypatch.setattr(application, "TIMEOUT_REPLY_EXTENDED", 0.1)
-    return application.ControllerApplication(XBee(), database_file=database_file)
+    app = application.ControllerApplication(APP_CONFIG)
+    api = XBee(APP_CONFIG[config.CONF_DEVICE])
+    monkeypatch.setattr(api, "_command", CoroutineMock())
+    app._api = api
+    return app
 
 
 def test_modem_status(app):
@@ -188,11 +201,7 @@ async def test_broadcast(app):
         b"\x02\x01\x00",
     )
 
-    app._api._command = mock.MagicMock(
-        side_effect=asyncio.coroutine(
-            mock.MagicMock(return_value=xbee_t.TXStatus.SUCCESS)
-        )
-    )
+    app._api._command.return_value = xbee_t.TXStatus.SUCCESS
 
     r = await app.broadcast(profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data)
     assert r[0] == xbee_t.TXStatus.SUCCESS
@@ -202,17 +211,11 @@ async def test_broadcast(app):
     assert app._api._command.call_args[0][4] == dst_ep
     assert app._api._command.call_args[0][9] == data
 
-    app._api._command = mock.MagicMock(
-        side_effect=asyncio.coroutine(
-            mock.MagicMock(return_value=xbee_t.TXStatus.ADDRESS_NOT_FOUND)
-        )
-    )
+    app._api._command.return_value = xbee_t.TXStatus.ADDRESS_NOT_FOUND
     r = await app.broadcast(profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data)
     assert r[0] != xbee_t.TXStatus.SUCCESS
 
-    app._api._command = mock.MagicMock(
-        side_effect=asyncio.coroutine(mock.MagicMock(side_effect=asyncio.TimeoutError))
-    )
+    app._api._command.side_effect = asyncio.TimeoutError
     r = await app.broadcast(profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data)
     assert r[0] != xbee_t.TXStatus.SUCCESS
 
@@ -304,19 +307,17 @@ async def _test_startup(
             "ZS": zs,
         }.get(cmd, None)
 
-    app._api._at_command = mock.MagicMock(
-        spec=XBee._at_command, side_effect=_at_command_mock
-    )
-
     async def init_api_mode_mock():
         nonlocal api_mode
         api_mode = api_config_succeeds
         return api_config_succeeds
 
-    app._api.init_api_mode = mock.MagicMock(side_effect=init_api_mode_mock)
-    app.form_network = mock.MagicMock(side_effect=asyncio.coroutine(mock.MagicMock()))
+    app.form_network = CoroutineMock()
 
-    await app.startup(auto_form=auto_form)
+    with mock.patch.object(XBee, "new") as api:
+        api.return_value._at_command = CoroutineMock(side_effect=_at_command_mock)
+        api.return_value.init_api_mode = CoroutineMock(side_effect=init_api_mode_mock)
+        await app.startup(auto_form=auto_form)
     return app
 
 
