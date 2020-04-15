@@ -2,8 +2,10 @@ import asyncio
 import binascii
 import logging
 import time
+from typing import Any, Dict, Optional
 
 import zigpy.application
+import zigpy.config
 import zigpy.device
 import zigpy.exceptions
 import zigpy.quirks
@@ -12,6 +14,8 @@ import zigpy.util
 from zigpy.zcl.clusters.general import Groups
 from zigpy.zdo.types import NodeDescriptor, ZDOCmd
 
+import zigpy_xbee.api
+from zigpy_xbee.config import CONF_DEVICE, CONFIG_SCHEMA
 from zigpy_xbee.types import EUI64, UNKNOWN_IEEE, UNKNOWN_NWK, TXStatus
 
 # how long coordinator would hold message for an end device in 10ms units
@@ -28,19 +32,21 @@ XBEE_ENDPOINT_ID = 0xE6
 
 
 class ControllerApplication(zigpy.application.ControllerApplication):
-    def __init__(self, api, database_file=None):
-        super().__init__(database_file=database_file)
-        self._api = api
-        api.set_application(self)
+    SCHEMA = CONFIG_SCHEMA
 
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config=zigpy.config.ZIGPY_SCHEMA(config))
+        self._api: Optional[zigpy_xbee.api.XBee] = None
         self._nwk = 0
 
     async def shutdown(self):
         """Shutdown application."""
-        self._api.close()
+        if self._api:
+            self._api.close()
 
     async def startup(self, auto_form=False):
         """Perform a complete application startup"""
+        self._api = await zigpy_xbee.api.XBee.new(self, self._config[CONF_DEVICE])
         try:
             # Ensure we have escaped commands
             await self._api._at_command("AP", 2)

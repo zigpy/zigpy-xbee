@@ -7,24 +7,26 @@ import serial
 import zigpy.exceptions
 
 from zigpy_xbee import api as xbee_api, types as t, uart
+import zigpy_xbee.config
 from zigpy_xbee.zigbee.application import ControllerApplication
+
+DEVICE_CONFIG = zigpy_xbee.config.SCHEMA_DEVICE(
+    {zigpy_xbee.config.CONF_DEVICE_PATH: "/dev/null"}
+)
 
 
 @pytest.fixture
 def api():
-    api = xbee_api.XBee()
+    api = xbee_api.XBee(DEVICE_CONFIG)
     api._uart = mock.MagicMock()
     return api
 
 
 @pytest.mark.asyncio
 async def test_connect(monkeypatch):
-    api = xbee_api.XBee()
-    dev = mock.MagicMock()
-    monkeypatch.setattr(
-        uart, "connect", mock.MagicMock(side_effect=asyncio.coroutine(mock.MagicMock()))
-    )
-    await api.connect(dev, 115200)
+    api = xbee_api.XBee(DEVICE_CONFIG)
+    monkeypatch.setattr(uart, "connect", CoroutineMock())
+    await api.connect()
 
 
 def test_close(api):
@@ -542,14 +544,13 @@ def test_handle_many_to_one_rri(api):
 
 @pytest.mark.asyncio
 async def test_reconnect_multiple_disconnects(monkeypatch, caplog):
-    api = xbee_api.XBee()
-    dev = mock.sentinel.uart
+    api = xbee_api.XBee(DEVICE_CONFIG)
     connect_mock = CoroutineMock()
     connect_mock.return_value = asyncio.Future()
     connect_mock.return_value.set_result(True)
     monkeypatch.setattr(uart, "connect", connect_mock)
 
-    await api.connect(dev, 115200)
+    await api.connect()
 
     caplog.set_level(logging.DEBUG)
     connected = asyncio.Future()
@@ -568,14 +569,13 @@ async def test_reconnect_multiple_disconnects(monkeypatch, caplog):
 
 @pytest.mark.asyncio
 async def test_reconnect_multiple_attempts(monkeypatch, caplog):
-    api = xbee_api.XBee()
-    dev = mock.sentinel.uart
+    api = xbee_api.XBee(DEVICE_CONFIG)
     connect_mock = CoroutineMock()
     connect_mock.return_value = asyncio.Future()
     connect_mock.return_value.set_result(True)
     monkeypatch.setattr(uart, "connect", connect_mock)
 
-    await api.connect(dev, 115200)
+    await api.connect()
 
     caplog.set_level(logging.DEBUG)
     connected = asyncio.Future()
@@ -597,11 +597,11 @@ async def test_reconnect_multiple_attempts(monkeypatch, caplog):
 async def test_probe_success(mock_connect, mock_at_cmd):
     """Test device probing."""
 
-    res = await xbee_api.XBee.probe(mock.sentinel.uart, mock.sentinel.baud)
+    res = await xbee_api.XBee.probe(DEVICE_CONFIG)
     assert res is True
     assert mock_connect.call_count == 1
     assert mock_connect.await_count == 1
-    assert mock_connect.call_args[0][0] is mock.sentinel.uart
+    assert mock_connect.call_args[0][0] == DEVICE_CONFIG
     assert mock_at_cmd.call_count == 1
     assert mock_connect.return_value.close.call_count == 1
 
@@ -613,11 +613,11 @@ async def test_probe_success(mock_connect, mock_at_cmd):
 async def test_probe_success_api_mode(mock_connect, mock_at_cmd, mock_api_mode):
     """Test device probing."""
 
-    res = await xbee_api.XBee.probe(mock.sentinel.uart, mock.sentinel.baud)
+    res = await xbee_api.XBee.probe(DEVICE_CONFIG)
     assert res is True
     assert mock_connect.call_count == 1
     assert mock_connect.await_count == 1
-    assert mock_connect.call_args[0][0] is mock.sentinel.uart
+    assert mock_connect.call_args[0][0] == DEVICE_CONFIG
     assert mock_at_cmd.call_count == 1
     assert mock_api_mode.call_count == 1
     assert mock_connect.return_value.close.call_count == 1
@@ -638,11 +638,11 @@ async def test_probe_fail(mock_connect, mock_at_cmd, mock_api_mode, exception):
     mock_api_mode.reset_mock()
     mock_at_cmd.reset_mock()
     mock_connect.reset_mock()
-    res = await xbee_api.XBee.probe(mock.sentinel.uart, mock.sentinel.baud)
+    res = await xbee_api.XBee.probe(DEVICE_CONFIG)
     assert res is False
     assert mock_connect.call_count == 1
     assert mock_connect.await_count == 1
-    assert mock_connect.call_args[0][0] is mock.sentinel.uart
+    assert mock_connect.call_args[0][0] == DEVICE_CONFIG
     assert mock_at_cmd.call_count == 1
     assert mock_api_mode.call_count == 1
     assert mock_connect.return_value.close.call_count == 1
@@ -658,11 +658,21 @@ async def test_probe_fail_api_mode(mock_connect, mock_at_cmd, mock_api_mode):
     mock_api_mode.reset_mock()
     mock_at_cmd.reset_mock()
     mock_connect.reset_mock()
-    res = await xbee_api.XBee.probe(mock.sentinel.uart, mock.sentinel.baud)
+    res = await xbee_api.XBee.probe(DEVICE_CONFIG)
     assert res is False
     assert mock_connect.call_count == 1
     assert mock_connect.await_count == 1
-    assert mock_connect.call_args[0][0] is mock.sentinel.uart
+    assert mock_connect.call_args[0][0] == DEVICE_CONFIG
     assert mock_at_cmd.call_count == 1
     assert mock_api_mode.call_count == 1
     assert mock_connect.return_value.close.call_count == 1
+
+
+@pytest.mark.asyncio
+@mock.patch.object(xbee_api.XBee, "connect")
+async def test_xbee_new(conn_mck):
+    """Test new class method."""
+    api = await xbee_api.XBee.new(mock.sentinel.application, DEVICE_CONFIG)
+    assert isinstance(api, xbee_api.XBee)
+    assert conn_mck.call_count == 1
+    assert conn_mck.await_count == 1
