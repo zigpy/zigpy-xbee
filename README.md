@@ -30,11 +30,14 @@ These are XBee Zigbee based radios that have been tested with the [zigpy-xbee](h
 - Digi XBee Series 3 (xbee3-24) modules
 
 # Releases of zigpy-xbee via PyPI
-Tagged versions of zigpy-xbee are also released via PyPI
 
+New packages of tagged versions are also released via the "zigpy-xbee" project on PyPI
 - https://pypi.org/project/zigpy-xbee/
-- https://pypi.org/project/zigpy-xbee/#history
-- https://pypi.org/project/zigpy-xbee/#files
+  - https://pypi.org/project/zigpy-xbee/#history
+  - https://pypi.org/project/zigpy-xbee/#files
+
+Older packages of tagged versions are still available on the "zigpy-xbee-homeassistant" project on PyPI
+  - https://pypi.org/project/zigpy-xbee-homeassistant/
 
 # How to contribute
 
