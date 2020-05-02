@@ -9,8 +9,8 @@ import serial
 from zigpy.exceptions import APIException, DeliveryError
 from zigpy.types import LVList
 
+import zigpy_xbee
 from zigpy_xbee.config import CONF_DEVICE_BAUDRATE, CONF_DEVICE_PATH, SCHEMA_DEVICE
-import zigpy_xbee.zigbee.application
 
 from . import types as t, uart
 
@@ -277,7 +277,7 @@ class XBee:
     @classmethod
     async def new(
         cls,
-        application: zigpy_xbee.zigbee.application.ControllerApplication,
+        application: "zigpy_xbee.zigbee.application.ControllerApplication",
         config: Dict[str, Any],
     ) -> "XBee":
         """Create new instance from """
