@@ -16,7 +16,7 @@ from . import types as t, uart
 
 LOGGER = logging.getLogger(__name__)
 
-AT_COMMAND_TIMEOUT = 2
+AT_COMMAND_TIMEOUT = 1
 REMOTE_AT_COMMAND_TIMEOUT = 30
 PROBE_TIMEOUT = 45
 
