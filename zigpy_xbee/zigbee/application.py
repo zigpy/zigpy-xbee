@@ -15,7 +15,7 @@ from zigpy.zcl.clusters.general import Groups
 from zigpy.zdo.types import NodeDescriptor, ZDOCmd
 
 import zigpy_xbee.api
-from zigpy_xbee.config import CONF_DEVICE, CONFIG_SCHEMA
+from zigpy_xbee.config import CONF_DEVICE, CONFIG_SCHEMA, SCHEMA_DEVICE
 from zigpy_xbee.types import EUI64, UNKNOWN_IEEE, UNKNOWN_NWK, TXStatus
 
 # how long coordinator would hold message for an end device in 10ms units
@@ -33,6 +33,9 @@ XBEE_ENDPOINT_ID = 0xE6
 
 class ControllerApplication(zigpy.application.ControllerApplication):
     SCHEMA = CONFIG_SCHEMA
+    SCHEMA_DEVICE = SCHEMA_DEVICE
+
+    probe = zigpy_xbee.api.XBee.probe
 
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config=zigpy.config.ZIGPY_SCHEMA(config))

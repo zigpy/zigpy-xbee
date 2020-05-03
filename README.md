@@ -29,12 +29,37 @@ These are XBee Zigbee based radios that have been tested with the [zigpy-xbee](h
 - Digi XBee Series 2 (S2) modules. Note: These will need to be manually flashed with the Zigbee Coordinator API firmware via XCTU.
 - Digi XBee Series 3 (xbee3-24) modules
 
-# Releases of zigpy-xbee via PyPI
-Tagged versions of zigpy-xbee are also released via PyPI
+# Testing new releases
 
+Testing a new release of the zigpy-xbee library before it is released in Home Assistant.
+
+If you are using Supervised Home Assistant (formerly known as the Hassio/Hass.io distro):
+- Add https://github.com/home-assistant/hassio-addons-development as "add-on" repository
+- Install "Custom deps deployment" addon
+- Update config like: 
+  ```
+  pypi:
+    - zigpy-xbee==0.12.0
+  apk: []
+  ```
+  where 0.12.0 is the new version
+- Start the addon
+
+If you are instead using some custom python installation of Home Assistant then do this:
+- Activate your python virtual env
+- Update package with ``pip``
+  ```
+  pip install zigpy-xbee==0.12.0
+
+# Releases of zigpy-xbee via PyPI
+
+New packages of tagged versions are also released via the "zigpy-xbee" project on PyPI
 - https://pypi.org/project/zigpy-xbee/
-- https://pypi.org/project/zigpy-xbee/#history
-- https://pypi.org/project/zigpy-xbee/#files
+  - https://pypi.org/project/zigpy-xbee/#history
+  - https://pypi.org/project/zigpy-xbee/#files
+
+Older packages of tagged versions are still available on the "zigpy-xbee-homeassistant" project on PyPI
+  - https://pypi.org/project/zigpy-xbee-homeassistant/
 
 # How to contribute
 
