@@ -29,6 +29,13 @@ These are XBee Zigbee based radios that have been tested with the [zigpy-xbee](h
 - Digi XBee Series 2 (S2) modules. Note: These will need to be manually flashed with the Zigbee Coordinator API firmware via XCTU.
 - Digi XBee Series 3 (xbee3-24) modules
 
+# Port configuration
+
+- To configure __usb__ port path for your XBee serial device, just specify the TTY (serial com) port, example : `/dev/ttyACM0`
+
+Note! Users can change UART baud rate of your Digi XBee using the Digi's XCTU configuration tool. Using XCTU tool 
+enable the API communication mode -- `ATAP2`, set baudrate to 57600 -- `ATBD6`, save parameters.
+
 # Testing new releases
 
 Testing a new release of the zigpy-xbee library before it is released in Home Assistant.
