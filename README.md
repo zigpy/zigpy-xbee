@@ -33,12 +33,8 @@ These are XBee Zigbee based radios that have been tested with the [zigpy-xbee](h
 
 - To configure __usb__ port path for your XBee serial device, just specify the TTY (serial com) port, example : `/dev/ttyACM0`
 
-Note! Users can change UART baud rate of your Digi XBee using the Digi's XCTU configuration tool.
-
-Developers should note that Digi has different baud rate recommeations for UART interface of different XBee chips series.
-- Digi XBee Series 3 Zigbee modules has UART baud rate set to 115200 by default.
-- Newer Digi XBee Series 2 chips (like for example Digi XBee S2C) the default UART baud rate should be 57600.
-- Older Digi XBee Series 2 chips (like for example Digi XStick USB Adapter XU-Z11) the default UART baud rate might be 9600.
+Note! Users can change UART baud rate of your Digi XBee using the Digi's XCTU configuration tool. Using XCTU tool 
+enable the API communication mode -- `ATAP2`, set baudrate to 57600 -- `ATBD6`, save parameters.
 
 # Testing new releases
 
