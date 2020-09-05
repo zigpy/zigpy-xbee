@@ -161,6 +161,10 @@ class NWK(uint16_t):
         return "0x{:04x}".format(self)
 
 
+class Relays(zigpy.types.LVList, item_type=NWK, length_type=uint8_t):
+    """List of Relays."""
+
+
 UNKNOWN_IEEE = EUI64([uint8_t(0xFF) for i in range(0, 8)])
 UNKNOWN_NWK = NWK(0xFFFE)
 

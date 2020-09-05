@@ -7,7 +7,6 @@ from typing import Any, Dict, Optional
 
 import serial
 from zigpy.exceptions import APIException, DeliveryError
-from zigpy.types import LVList
 
 import zigpy_xbee
 from zigpy_xbee.config import CONF_DEVICE_BAUDRATE, CONF_DEVICE_PATH, SCHEMA_DEVICE
@@ -68,7 +67,7 @@ COMMAND_REQUESTS = {
     ),
     "create_source_route": (
         0x21,
-        (t.FrameId, t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)),
+        (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.Relays),
         None,
     ),
     "register_joining_device": (0x24, (), None),
@@ -104,7 +103,7 @@ COMMAND_RESPONSES = {
         None,
     ),
     "extended_status": (0x98, (), None),
-    "route_record_indicator": (0xA1, (t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)), None),
+    "route_record_indicator": (0xA1, (t.EUI64, t.NWK, t.uint8_t, t.Relays), None),
     "many_to_one_rri": (0xA3, (t.EUI64, t.NWK, t.uint8_t), None),
     "node_id_indicator": (0x95, (), None),
 }
