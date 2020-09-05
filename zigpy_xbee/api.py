@@ -7,7 +7,6 @@ from typing import Any, Dict, Optional
 
 import serial
 from zigpy.exceptions import APIException, DeliveryError
-from zigpy.types import LVList
 
 import zigpy_xbee
 from zigpy_xbee.config import CONF_DEVICE_BAUDRATE, CONF_DEVICE_PATH, SCHEMA_DEVICE
@@ -30,6 +29,11 @@ class ModemStatus(t.uint8_t, t.UndefinedEnum):
     NETWORK_SECURITY_KEY_UPDATED = 0x07
     VOLTAGE_SUPPLY_LIMIT_EXCEEDED = 0x0D
     MODEM_CONFIGURATION_CHANGED_WHILE_JOIN_IN_PROGRESS = 0x11
+    PAN_ID_CONFLICT_DETECTED = 0x3E
+    PAN_ID_UPDATED_DUE_TO_CONFLICT = 0x3F
+    JOIN_WINDOW_OPENED = 0x43
+    JOIN_WINDOW_CLOSED = 0x44
+    NETWORK_SECURITY_KEY_ROTATION_INITIATED = 0x45
 
     UNKNOWN_MODEM_STATUS = 0xFF
     _UNDEFINED = 0xFF
@@ -63,7 +67,7 @@ COMMAND_REQUESTS = {
     ),
     "create_source_route": (
         0x21,
-        (t.FrameId, t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)),
+        (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.Relays),
         None,
     ),
     "register_joining_device": (0x24, (), None),
@@ -99,7 +103,7 @@ COMMAND_RESPONSES = {
         None,
     ),
     "extended_status": (0x98, (), None),
-    "route_record_indicator": (0xA1, (t.EUI64, t.NWK, t.uint8_t, LVList(t.NWK)), None),
+    "route_record_indicator": (0xA1, (t.EUI64, t.NWK, t.uint8_t, t.Relays), None),
     "many_to_one_rri": (0xA3, (t.EUI64, t.NWK, t.uint8_t), None),
     "node_id_indicator": (0x95, (), None),
 }
