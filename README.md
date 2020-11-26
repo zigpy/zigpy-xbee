@@ -23,11 +23,11 @@ zigpy works with separate radio libraries which can each interface with multiple
 
 ### Known working XBee based Zigbee radio modules for Zigpy
 
-These are XBee Zigbee based radios that have been tested with the [zigpy-xbee](https://github.com/zigpy/zigpy-xbee) library for zigpy
+These are XBee Zigbee based radios that have been tested with the [zigpy-xbee](https://github.com/zigpy/zigpy-xbee) library for [zigpy](https://github.com/zigpy/zigpy)
 
-- Digi XBee Series 2C (S2C) modules
-- Digi XBee Series 2 (S2) modules. Note: These will need to be manually flashed with the Zigbee Coordinator API firmware via XCTU.
-- Digi XBee Series 3 (xbee3-24) modules
+- [Digi XBee Series 3 (xbee3-24)](https://www.digi.com/products/embedded-systems/digi-xbee/rf-modules/2-4-ghz-rf-modules/xbee3-zigbee-3) and [Digi XBee Series S2C (2C)](https://www.digi.com/products/embedded-systems/digi-xbee/rf-modules/2-4-ghz-rf-modules/xbee-zigbee) modules
+  - Note! While not a must, [it is recommend to upgrade XBee Series 3 and S2C to newest firmware firmware using XCTU](https://www.digi.com/resources/documentation/Digidocs/90002002/Default.htm#Tasks/t_load_zb_firmware.htm)
+- [Digi XBee Series 2 (S2)](https://www.digi.com/support/productdetail?pid=3430) modules (Note! This first have to be [flashed with Zigbee Coordinator API firmware](https://www.digi.com/support/productdetail?pid=3430))
 
 # Port configuration
 
