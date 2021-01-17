@@ -108,8 +108,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         dev = zigpy.device.Device(self, self.ieee, self.nwk)
         dev.status = zigpy.device.Status.ENDPOINTS_INIT
         dev.add_endpoint(XBEE_ENDPOINT_ID)
-        self.listener_event("raw_device_initialized", dev)
         xbee_dev = XBeeCoordinator(self, self.ieee, self.nwk, dev)
+        self.listener_event("raw_device_initialized", xbee_dev)
         self.devices[dev.ieee] = xbee_dev
 
     async def force_remove(self, dev):
