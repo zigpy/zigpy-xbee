@@ -381,7 +381,7 @@ class XBeeCoordinator(zigpy.quirks.CustomDevice):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.node_desc = NodeDescriptor(
-            0x01, 0x40, 0x8E, 0x101E, 0x52, 0x00FF, 0x2C00, 0x00FF, 0x00
+            0x00, 0x40, 0x8E, 0x101E, 0x52, 0x00FF, 0x2C00, 0x00FF, 0x00
         )
 
     replacement = {
