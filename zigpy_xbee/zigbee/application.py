@@ -254,7 +254,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         if apply_changes:
             options |= 0x02
         if encryption:
-            options |= 0x20
+            options |= 0x10
         dev = self.get_device(nwk=nwk)
         return self._api._remote_at_command(dev.ieee, nwk, options, cmd_name, *args)
 
