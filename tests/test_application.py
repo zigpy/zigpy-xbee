@@ -502,7 +502,7 @@ def test_remote_at_cmd(app, device):
     assert app._api._remote_at_command.call_count == 1
     assert app._api._remote_at_command.call_args[0][0] is dev.ieee
     assert app._api._remote_at_command.call_args[0][1] == s.nwk
-    assert app._api._remote_at_command.call_args[0][2] == 0x22
+    assert app._api._remote_at_command.call_args[0][2] == 0x12
     assert app._api._remote_at_command.call_args[0][3] == s.cmd
     assert app._api._remote_at_command.call_args[0][4] == s.data
 
