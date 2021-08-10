@@ -222,7 +222,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         LOGGER.debug("Zigbee request tsn #%s: %s", sequence, binascii.hexlify(data))
 
         tx_opts = 0x00
-        if expect_reply and device.node_desc.is_end_device in (True, None):
+        if expect_reply and (
+            device.node_desc is None or device.node_desc.is_end_device
+        ):
             tx_opts |= 0x40
         send_req = self._api.tx_explicit(
             device.ieee,
