@@ -108,8 +108,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         dev = zigpy.device.Device(self, self.ieee, self.nwk)
         dev.status = zigpy.device.Status.ENDPOINTS_INIT
         dev.add_endpoint(XBEE_ENDPOINT_ID)
-        self.listener_event("raw_device_initialized", dev)
         xbee_dev = XBeeCoordinator(self, self.ieee, self.nwk, dev)
+        self.listener_event("raw_device_initialized", xbee_dev)
         self.devices[dev.ieee] = xbee_dev
 
     async def force_remove(self, dev):
@@ -383,7 +383,7 @@ class XBeeCoordinator(zigpy.quirks.CustomDevice):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.node_desc = NodeDescriptor(
-            0x01, 0x40, 0x8E, 0x101E, 0x52, 0x00FF, 0x2C00, 0x00FF, 0x00
+            0x00, 0x40, 0x8E, 0x101E, 0x52, 0x00FF, 0x2C00, 0x00FF, 0x00
         )
 
     replacement = {
