@@ -404,15 +404,20 @@ async def _test_request(
     expect_reply=True,
     send_success=True,
     send_timeout=False,
-    is_end_device=None,
+    is_end_device=True,
+    node_desc=True,
     **kwargs
 ):
     seq = 123
     nwk = 0x2345
     ieee = t.EUI64(b"\x01\x02\x03\x04\x05\x06\x07\x08")
     dev = app.add_device(ieee, nwk)
-    dev.node_desc = mock.MagicMock()
-    dev.node_desc.is_end_device = is_end_device
+
+    if node_desc:
+        dev.node_desc = mock.MagicMock()
+        dev.node_desc.is_end_device = is_end_device
+    else:
+        dev.node_desc = None
 
     def _mock_command(
         cmdname, ieee, nwk, src_ep, dst_ep, cluster, profile, radius, options, data
@@ -446,6 +451,12 @@ async def test_request_with_reply(app):
 
 
 @pytest.mark.asyncio
+async def test_request_without_node_desc(app):
+    r = await _test_request(app, expect_reply=True, send_success=True, node_desc=False)
+    assert r[0] == 0
+
+
+@pytest.mark.asyncio
 async def test_request_send_timeout(app):
     r = await _test_request(app, send_timeout=True)
     assert r[0] != 0
@@ -466,8 +477,7 @@ async def test_request_extended_timeout(app):
     assert app._api._command.call_args[0][8] & 0x40 == 0x00
     app._api._command.reset_mock()
 
-    is_end_device = None
-    r = await _test_request(app, True, True, is_end_device=is_end_device)
+    r = await _test_request(app, True, True, node_desc=False)
     assert r[0] == xbee_t.TXStatus.SUCCESS
     assert app._api._command.call_count == 1
     assert app._api._command.call_args[0][8] & 0x40 == 0x40
@@ -502,7 +512,7 @@ def test_remote_at_cmd(app, device):
     assert app._api._remote_at_command.call_count == 1
     assert app._api._remote_at_command.call_args[0][0] is dev.ieee
     assert app._api._remote_at_command.call_args[0][1] == s.nwk
-    assert app._api._remote_at_command.call_args[0][2] == 0x22
+    assert app._api._remote_at_command.call_args[0][2] == 0x12
     assert app._api._remote_at_command.call_args[0][3] == s.cmd
     assert app._api._remote_at_command.call_args[0][4] == s.data
 
