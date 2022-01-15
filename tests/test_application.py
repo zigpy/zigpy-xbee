@@ -259,7 +259,7 @@ async def test_form_network(app):
     await app.form_network()
     assert app._api._at_command.call_count >= 1
     assert app._api._queued_at.call_count >= 7
-    assert app._nwk == 0x0000
+    assert app.state.node_info.nwk == 0x0000
 
     app._api._at_command.reset_mock()
     app._api._queued_at.reset_mock()
@@ -267,7 +267,7 @@ async def test_form_network(app):
     await app.form_network()
     assert app._api._at_command.call_count >= 1
     assert app._api._queued_at.call_count >= 7
-    assert app._nwk == 0x0000
+    assert app.state.node_info.nwk == 0x0000
 
 
 async def _test_startup(
@@ -282,7 +282,7 @@ async def _test_startup(
     legacy_module=False,
 ):
     ai_tries = 5
-    app._nwk = mock.sentinel.nwk
+    app.state.node_info.nwk = mock.sentinel.nwk
 
     async def _at_command_mock(cmd, *args):
         nonlocal ai_tries
@@ -325,44 +325,44 @@ async def _test_startup(
 async def test_startup_ai(app):
     auto_form = True
     await _test_startup(app, 0x00, auto_form)
-    assert app._nwk == 0x0000
-    assert app._ieee == t.EUI64(range(1, 9))
+    assert app.state.node_info.nwk == 0x0000
+    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
     assert app.form_network.call_count == 0
 
     auto_form = False
     await _test_startup(app, 0x00, auto_form)
-    assert app._nwk == 0x0000
-    assert app._ieee == t.EUI64(range(1, 9))
+    assert app.state.node_info.nwk == 0x0000
+    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
     assert app.form_network.call_count == 0
 
     auto_form = True
     await _test_startup(app, 0x06, auto_form)
-    assert app._nwk == 0xFFFE
-    assert app._ieee == t.EUI64(range(1, 9))
+    assert app.state.node_info.nwk == 0xFFFE
+    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
     assert app.form_network.call_count == 1
 
     auto_form = False
     await _test_startup(app, 0x06, auto_form)
-    assert app._nwk == 0xFFFE
-    assert app._ieee == t.EUI64(range(1, 9))
+    assert app.state.node_info.nwk == 0xFFFE
+    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
     assert app.form_network.call_count == 0
 
     auto_form = True
     await _test_startup(app, 0x00, auto_form, zs=1)
-    assert app._nwk == 0x0000
-    assert app._ieee == t.EUI64(range(1, 9))
+    assert app.state.node_info.nwk == 0x0000
+    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
     assert app.form_network.call_count == 1
 
     auto_form = False
     await _test_startup(app, 0x06, auto_form, legacy_module=True)
-    assert app._nwk == 0xFFFE
-    assert app._ieee == t.EUI64(range(1, 9))
+    assert app.state.node_info.nwk == 0xFFFE
+    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
     assert app.form_network.call_count == 0
 
     auto_form = True
     await _test_startup(app, 0x00, auto_form, zs=1, legacy_module=True)
-    assert app._nwk == 0x0000
-    assert app._ieee == t.EUI64(range(1, 9))
+    assert app.state.node_info.nwk == 0x0000
+    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
     assert app.form_network.call_count == 1
 
 
@@ -370,8 +370,8 @@ async def test_startup_ai(app):
 async def test_startup_no_api_mode(app):
     auto_form = True
     await _test_startup(app, 0x00, auto_form, api_mode=False)
-    assert app._nwk == 0x0000
-    assert app._ieee == t.EUI64(range(1, 9))
+    assert app.state.node_info.nwk == 0x0000
+    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
     assert app.form_network.call_count == 0
     assert app._api.init_api_mode.call_count == 1
     assert app._api._at_command.call_count >= 16
@@ -381,8 +381,8 @@ async def test_startup_no_api_mode(app):
 async def test_startup_api_mode_config_fails(app):
     auto_form = True
     await _test_startup(app, 0x00, auto_form, api_mode=False, api_config_succeeds=False)
-    assert app._nwk == mock.sentinel.nwk
-    assert app._ieee is None
+    assert app.state.node_info.nwk == mock.sentinel.nwk
+    assert app.state.node_info.ieee is None
     assert app.form_network.call_count == 0
     assert app._api.init_api_mode.call_count == 1
     assert app._api._at_command.call_count == 1

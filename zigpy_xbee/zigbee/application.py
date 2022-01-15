@@ -12,7 +12,7 @@ import zigpy.quirks
 import zigpy.types
 import zigpy.util
 from zigpy.zcl.clusters.general import Groups
-from zigpy.zdo.types import NodeDescriptor, ZDOCmd
+from zigpy.zdo.types import LogicalType, NodeDescriptor, ZDOCmd
 
 import zigpy_xbee.api
 from zigpy_xbee.config import CONF_DEVICE, CONFIG_SCHEMA, SCHEMA_DEVICE
@@ -40,15 +40,13 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config=zigpy.config.ZIGPY_SCHEMA(config))
         self._api: Optional[zigpy_xbee.api.XBee] = None
-        self._nwk = 0
 
-    async def shutdown(self):
+    async def disconnect(self):
         """Shutdown application."""
         if self._api:
             self._api.close()
 
-    async def startup(self, auto_form=False):
-        """Perform a complete application startup"""
+    async def connect(self):
         self._api = await zigpy_xbee.api.XBee.new(self, self._config[CONF_DEVICE])
         try:
             # Ensure we have escaped commands
@@ -56,26 +54,18 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         except asyncio.TimeoutError:
             LOGGER.debug("No response to API frame. Configure API mode")
             if not await self._api.init_api_mode():
-                LOGGER.error("Failed to configure XBee API mode.")
-                return False
+                raise zigpy.exceptions.ControllerException(
+                    "Failed to configure XBee API mode."
+                )
 
-        await self._api._at_command("AO", 0x03)
-
-        serial_high = await self._api._at_command("SH")
-        serial_low = await self._api._at_command("SL")
-        ieee = EUI64.deserialize(
-            serial_high.to_bytes(4, "big") + serial_low.to_bytes(4, "big")
-        )[0]
-        self._ieee = zigpy.types.EUI64(ieee)
-        LOGGER.debug("Read local IEEE address as %s", self._ieee)
-
+    async def start_network(self):
         try:
             association_state = await asyncio.wait_for(
                 self._get_association_state(), timeout=4
             )
         except asyncio.TimeoutError:
             association_state = 0xFF
-        self._nwk = await self._api._at_command("MY")
+
         enc_enabled = await self._api._at_command("EE")
         enc_options = await self._api._at_command("EO")
         zb_profile = await self._api._at_command("ZS")
@@ -85,53 +75,72 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             enc_options != 2,
             zb_profile != 2,
             association_state != 0,
-            self._nwk != 0,
+            self.state.node_info.nwk != 0x0000,
         )
-        if auto_form and any(should_form):
-            await self.form_network()
 
+        if should_form:
+            raise zigpy.exceptions.NetworkNotFormed("Network is not formed")
+
+        # Disable joins
         await self._api._at_command("NJ", 0)
         await self._api._at_command("SP", CONF_CYCLIC_SLEEP_PERIOD)
         await self._api._at_command("SN", CONF_POLL_TIMEOUT)
-        id = await self._api._at_command("ID")
-        LOGGER.debug("Extended PAN ID: 0x%016x", id)
-        id = await self._api._at_command("OP")
-        LOGGER.debug("Operating Extended PAN ID: 0x%016x", id)
-        id = await self._api._at_command("OI")
-        LOGGER.debug("PAN ID: 0x%04x", id)
-        try:
-            ce = await self._api._at_command("CE")
-            LOGGER.debug("Coordinator %s", "enabled" if ce else "disabled")
-        except RuntimeError as exc:
-            LOGGER.debug("sending CE command: %s", exc)
 
-        dev = zigpy.device.Device(self, self.ieee, self.nwk)
+        dev = zigpy.device.Device(
+            self, self.state.node_info.ieee, self.state.node_info.nwk
+        )
         dev.status = zigpy.device.Status.ENDPOINTS_INIT
         dev.add_endpoint(XBEE_ENDPOINT_ID)
-        xbee_dev = XBeeCoordinator(self, self.ieee, self.nwk, dev)
+
+        xbee_dev = XBeeCoordinator(
+            self, self.state.node_info.ieee, self.state.node_info.nwk, dev
+        )
         self.listener_event("raw_device_initialized", xbee_dev)
         self.devices[dev.ieee] = xbee_dev
 
-    async def force_remove(self, dev):
-        """Forcibly remove device from NCP."""
-        pass
+    async def load_network_info(self, *, load_devices=False):
+        network_info = self.state.network_info
+        node_info = self.state.node_info
 
-    async def form_network(self, channel=15, pan_id=None, extended_pan_id=None):
-        LOGGER.info("Forming network on channel %s", channel)
-        scan_bitmask = 1 << (channel - 11)
+        # Load node info
+        node_info.nwk = await self._api._at_command("MY")
+        serial_high = await self._api._at_command("SH")
+        serial_low = await self._api._at_command("SL")
+        node_info.ieee = zigpy.types.EUI64(
+            EUI64.deserialize(
+                serial_high.to_bytes(4, "big") + serial_low.to_bytes(4, "big")
+            )[0]
+        )
+
+        if await self._api._at_command("CE") == 0x01:
+            node_info.logical_type = LogicalType.Coordinator
+        else:
+            node_info.logical_type = LogicalType.EndDevice
+
+        # Load network info
+        network_info.pan_id = await self._api._at_command("OI")
+        network_info.extended_pan_id = await self._api._at_command("ID")
+        network_info.channel = await self._api._at_command("CH")
+
+    async def write_network_info(self, *, network_info, node_info):
+        scan_bitmask = 1 << (network_info.channel - 11)
+
         await self._api._queued_at("ZS", 2)
         await self._api._queued_at("SC", scan_bitmask)
         await self._api._queued_at("EE", 1)
         await self._api._queued_at("EO", 2)
-        await self._api._queued_at("NK", 0)
-        await self._api._queued_at("KY", b"ZigBeeAlliance09")
+
+        key_as_int = int.from_bytes(network_info.network_key.key.serialize(), "big")
+        await self._api._queued_at("NK", key_as_int)
+
+        tclk_as_int = int.from_bytes(network_info.tc_link_key.key.serialize(), "big")
+        await self._api._queued_at("KY", tclk_as_int)
+
         await self._api._queued_at("NJ", 0)
         await self._api._queued_at("SP", CONF_CYCLIC_SLEEP_PERIOD)
         await self._api._queued_at("SN", CONF_POLL_TIMEOUT)
-        try:
-            await self._api._queued_at("CE", 1)
-        except RuntimeError:
-            pass
+        await self._api._queued_at("SM", 0)
+        await self._api._queued_at("CE", 1)
         await self._api._at_command("WR")
 
         await asyncio.wait_for(self._api.coordinator_started_event.wait(), timeout=10)
@@ -139,8 +148,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self._get_association_state(), timeout=10
         )
         LOGGER.debug("Association state: %s", association_state)
-        self._nwk = await self._api._at_command("MY")
-        assert self._nwk == 0x0000
+
+    async def force_remove(self, dev):
+        """Forcibly remove device from NCP."""
+        pass
 
     async def _get_association_state(self):
         """Wait for Zigbee to start."""
@@ -266,6 +277,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._api._at_command("AC")
         await self._api._at_command("CB", 2)
 
+    async def permit_with_key(self, node, code, time_s=60):
+        raise NotImplementedError("XBee does not support install codes")
+
     def handle_modem_status(self, status):
         LOGGER.info("Modem status update: %s (%s)", status.name, status.value)
 
@@ -296,7 +310,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self.handle_join(nwk, ieee, 0)
 
         try:
-            self.devices[self.ieee].last_seen = time.time()
+            self.devices[self.state.node_info.ieee].last_seen = time.time()
         except KeyError:
             pass
         try:
@@ -383,7 +397,24 @@ class XBeeCoordinator(zigpy.quirks.CustomDevice):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.node_desc = NodeDescriptor(
-            0x00, 0x40, 0x8E, 0x101E, 0x52, 0x00FF, 0x2C00, 0x00FF, 0x00
+            logical_type=NodeDescriptor.LogicalType.Coordinator,
+            complex_descriptor_available=0,
+            user_descriptor_available=0,
+            reserved=0,
+            aps_flags=0,
+            frequency_band=NodeDescriptor.FrequencyBand.Freq2400MHz,
+            mac_capability_flags=(
+                NodeDescriptor.MACCapabilityFlags.AllocateAddress
+                | NodeDescriptor.MACCapabilityFlags.RxOnWhenIdle
+                | NodeDescriptor.MACCapabilityFlags.MainsPowered
+                | NodeDescriptor.MACCapabilityFlags.FullFunctionDevice
+            ),
+            manufacturer_code=4126,
+            maximum_buffer_size=82,
+            maximum_incoming_transfer_size=255,
+            server_mask=11264,
+            maximum_outgoing_transfer_size=255,
+            descriptor_capability_field=NodeDescriptor.DescriptorCapability.NONE,
         )
 
     replacement = {
