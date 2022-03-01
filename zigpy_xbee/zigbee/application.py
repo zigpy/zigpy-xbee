@@ -66,6 +66,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         except asyncio.TimeoutError:
             association_state = 0xFF
 
+        # Enable ZDO passthrough
+        await self._api._at_command("AO", 0x03)
+
         enc_enabled = await self._api._at_command("EE")
         enc_options = await self._api._at_command("EO")
         zb_profile = await self._api._at_command("ZS")
