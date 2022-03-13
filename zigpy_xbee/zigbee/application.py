@@ -12,7 +12,7 @@ import zigpy.quirks
 import zigpy.types
 import zigpy.util
 from zigpy.zcl.clusters.general import Groups
-from zigpy.zdo.types import LogicalType, NodeDescriptor, ZDOCmd
+import zigpy.zdo.types as zdo_t
 
 import zigpy_xbee.api
 from zigpy_xbee.config import CONF_DEVICE, CONFIG_SCHEMA, SCHEMA_DEVICE
@@ -102,25 +102,22 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self.devices[dev.ieee] = xbee_dev
 
     async def load_network_info(self, *, load_devices=False):
-        network_info = self.state.network_info
-        node_info = self.state.node_info
-
         # Load node info
-        node_info.nwk = await self._api._at_command("MY")
+        node_info = self.state.node_info
+        node_info.nwk = zigpy.types.NWK(await self._api._at_command("MY"))
         serial_high = await self._api._at_command("SH")
         serial_low = await self._api._at_command("SL")
         node_info.ieee = zigpy.types.EUI64(
-            EUI64.deserialize(
-                serial_high.to_bytes(4, "big") + serial_low.to_bytes(4, "big")
-            )[0]
+            serial_high.to_bytes(4, "big") + serial_low.to_bytes(4, "big")
         )
 
         if await self._api._at_command("CE") == 0x01:
-            node_info.logical_type = LogicalType.Coordinator
+            node_info.logical_type = zdo_t.LogicalType.Coordinator
         else:
-            node_info.logical_type = LogicalType.EndDevice
+            node_info.logical_type = zdo_t.LogicalType.EndDevice
 
         # Load network info
+        network_info = self.state.network_info
         network_info.pan_id = await self._api._at_command("OI")
         network_info.extended_pan_id = await self._api._at_command("ID")
         network_info.channel = await self._api._at_command("CH")
@@ -293,7 +290,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             LOGGER.info("handle_rx self addressed")
 
         ember_ieee = zigpy.types.EUI64(src_ieee)
-        if dst_ep == 0 and cluster_id == ZDOCmd.Device_annce:
+        if dst_ep == 0 and cluster_id == zdo_t.ZDOCmd.Device_annce:
             # ZDO Device announce request
             nwk, rest = zigpy.types.NWK.deserialize(data[1:])
             ieee, rest = zigpy.types.EUI64.deserialize(rest)
@@ -399,25 +396,25 @@ class XBeeCoordinator(zigpy.quirks.CustomDevice):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.node_desc = NodeDescriptor(
-            logical_type=NodeDescriptor.LogicalType.Coordinator,
+        self.node_desc = zdo_t.NodeDescriptor(
+            logical_type=zdo_t.LogicalType.Coordinator,
             complex_descriptor_available=0,
             user_descriptor_available=0,
             reserved=0,
             aps_flags=0,
-            frequency_band=NodeDescriptor.FrequencyBand.Freq2400MHz,
+            frequency_band=zdo_t.NodeDescriptor.FrequencyBand.Freq2400MHz,
             mac_capability_flags=(
-                NodeDescriptor.MACCapabilityFlags.AllocateAddress
-                | NodeDescriptor.MACCapabilityFlags.RxOnWhenIdle
-                | NodeDescriptor.MACCapabilityFlags.MainsPowered
-                | NodeDescriptor.MACCapabilityFlags.FullFunctionDevice
+                zdo_t.NodeDescriptor.MACCapabilityFlags.AllocateAddress
+                | zdo_t.NodeDescriptor.MACCapabilityFlags.RxOnWhenIdle
+                | zdo_t.NodeDescriptor.MACCapabilityFlags.MainsPowered
+                | zdo_t.NodeDescriptor.MACCapabilityFlags.FullFunctionDevice
             ),
             manufacturer_code=4126,
             maximum_buffer_size=82,
             maximum_incoming_transfer_size=255,
             server_mask=11264,
             maximum_outgoing_transfer_size=255,
-            descriptor_capability_field=NodeDescriptor.DescriptorCapability.NONE,
+            descriptor_capability_field=zdo_t.NodeDescriptor.DescriptorCapability.NONE,
         )
 
     replacement = {
