@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from asynctest import CoroutineMock, mock
+import asynctest as mock
 import pytest
 import serial
 import zigpy.exceptions
@@ -25,7 +25,7 @@ def api():
 @pytest.mark.asyncio
 async def test_connect(monkeypatch):
     api = xbee_api.XBee(DEVICE_CONFIG)
-    monkeypatch.setattr(uart, "connect", CoroutineMock())
+    monkeypatch.setattr(uart, "connect", mock.CoroutineMock())
     await api.connect()
 
 
@@ -545,7 +545,7 @@ def test_handle_many_to_one_rri(api):
 @pytest.mark.asyncio
 async def test_reconnect_multiple_disconnects(monkeypatch, caplog):
     api = xbee_api.XBee(DEVICE_CONFIG)
-    connect_mock = CoroutineMock()
+    connect_mock = mock.CoroutineMock()
     connect_mock.return_value = asyncio.Future()
     connect_mock.return_value.set_result(True)
     monkeypatch.setattr(uart, "connect", connect_mock)
@@ -570,7 +570,7 @@ async def test_reconnect_multiple_disconnects(monkeypatch, caplog):
 @pytest.mark.asyncio
 async def test_reconnect_multiple_attempts(monkeypatch, caplog):
     api = xbee_api.XBee(DEVICE_CONFIG)
-    connect_mock = CoroutineMock()
+    connect_mock = mock.CoroutineMock()
     connect_mock.return_value = asyncio.Future()
     connect_mock.return_value.set_result(True)
     monkeypatch.setattr(uart, "connect", connect_mock)
@@ -592,7 +592,7 @@ async def test_reconnect_multiple_attempts(monkeypatch, caplog):
 
 
 @pytest.mark.asyncio
-@mock.patch.object(xbee_api.XBee, "_at_command", new_callable=CoroutineMock)
+@mock.patch.object(xbee_api.XBee, "_at_command", new_callable=mock.CoroutineMock)
 @mock.patch.object(uart, "connect")
 async def test_probe_success(mock_connect, mock_at_cmd):
     """Test device probing."""

@@ -1,6 +1,5 @@
 import asyncio
 
-from asynctest import CoroutineMock, mock
 import pytest
 from zigpy import types as t
 from zigpy.zdo.types import ZDOCmd
@@ -9,6 +8,8 @@ from zigpy_xbee.api import ModemStatus, XBee
 import zigpy_xbee.config as config
 import zigpy_xbee.types as xbee_t
 from zigpy_xbee.zigbee import application
+
+import tests.async_mock as mock
 
 APP_CONFIG = {
     config.CONF_DEVICE: {
@@ -26,7 +27,7 @@ def app(monkeypatch):
     monkeypatch.setattr(application, "TIMEOUT_REPLY_EXTENDED", 0.1)
     app = application.ControllerApplication(APP_CONFIG)
     api = XBee(APP_CONFIG[config.CONF_DEVICE])
-    monkeypatch.setattr(api, "_command", CoroutineMock())
+    monkeypatch.setattr(api, "_command", mock.AsyncMock())
     app._api = api
     return app
 
@@ -312,11 +313,11 @@ async def _test_startup(
         api_mode = api_config_succeeds
         return api_config_succeeds
 
-    app.form_network = CoroutineMock()
+    app.form_network = mock.AsyncMock()
 
     with mock.patch.object(XBee, "new") as api:
-        api.return_value._at_command = CoroutineMock(side_effect=_at_command_mock)
-        api.return_value.init_api_mode = CoroutineMock(side_effect=init_api_mode_mock)
+        api.return_value._at_command = mock.AsyncMock(side_effect=_at_command_mock)
+        api.return_value.init_api_mode = mock.AsyncMock(side_effect=init_api_mode_mock)
         await app.startup(auto_form=auto_form)
     return app
 
