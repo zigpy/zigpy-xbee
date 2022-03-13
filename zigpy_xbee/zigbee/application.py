@@ -81,7 +81,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self.state.node_info.nwk != 0x0000,
         )
 
-        if should_form:
+        if any(should_form):
             raise zigpy.exceptions.NetworkNotFormed("Network is not formed")
 
         # Disable joins
