@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 from zigpy import types as t
+import zigpy.exceptions
 from zigpy.zdo.types import ZDOCmd
 
 from zigpy_xbee.api import ModemStatus, XBee
@@ -189,7 +190,6 @@ def test_device_join_inconsistent_ieee(app, device):
     _device_join(app, dev, data)
 
 
-@pytest.mark.asyncio
 async def test_broadcast(app):
     (profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data) = (
         0x260,
@@ -221,7 +221,6 @@ async def test_broadcast(app):
     assert r[0] != xbee_t.TXStatus.SUCCESS
 
 
-@pytest.mark.asyncio
 async def test_get_association_state(app):
     ai_results = (0xFF, 0xFF, 0xFF, 0xFF, mock.sentinel.ai)
     app._api._at_command = mock.AsyncMock(
@@ -232,7 +231,6 @@ async def test_get_association_state(app):
     assert ai is mock.sentinel.ai
 
 
-@pytest.mark.asyncio
 async def test_form_network(app):
     legacy_module = False
 
@@ -256,10 +254,18 @@ async def test_form_network(app):
         return_value=0x00,
     )
 
+    app.write_network_info = mock.MagicMock(wraps=app.write_network_info)
+
     await app.form_network()
     assert app._api._at_command.call_count >= 1
     assert app._api._queued_at.call_count >= 7
-    assert app.state.node_info.nwk == 0x0000
+
+    network_info = app.write_network_info.mock_calls[0][2]["network_info"]
+
+    app._api._queued_at.assert_any_call("SC", 1 << (network_info.channel - 11))
+    app._api._queued_at.assert_any_call(
+        "KY", int.from_bytes(b"ZigBeeAlliance09", "big")
+    )
 
     app._api._at_command.reset_mock()
     app._api._queued_at.reset_mock()
@@ -267,13 +273,18 @@ async def test_form_network(app):
     await app.form_network()
     assert app._api._at_command.call_count >= 1
     assert app._api._queued_at.call_count >= 7
-    assert app.state.node_info.nwk == 0x0000
+
+    network_info = app.write_network_info.mock_calls[0][2]["network_info"]
+
+    app._api._queued_at.assert_any_call("SC", 1 << (network_info.channel - 11))
+    app._api._queued_at.assert_any_call(
+        "KY", int.from_bytes(b"ZigBeeAlliance09", "big")
+    )
 
 
-async def _test_startup(
+async def _test_start_network(
     app,
     ai_status=0xFF,
-    auto_form=False,
     api_mode=True,
     api_config_succeeds=True,
     ee=1,
@@ -284,7 +295,7 @@ async def _test_startup(
     ai_tries = 5
     app.state.node_info.nwk = mock.sentinel.nwk
 
-    async def _at_command_mock(cmd, *args):
+    def _at_command_mock(cmd, *args):
         nonlocal ai_tries
         if not api_mode:
             raise asyncio.TimeoutError
@@ -307,88 +318,67 @@ async def _test_startup(
             "ZS": zs,
         }.get(cmd, None)
 
-    async def init_api_mode_mock():
+    def init_api_mode_mock():
         nonlocal api_mode
         api_mode = api_config_succeeds
         return api_config_succeeds
 
-    app.form_network = mock.AsyncMock()
+    with mock.patch("zigpy_xbee.api.XBee") as XBee_mock:
+        api_mock = mock.MagicMock()
+        api_mock._at_command = mock.AsyncMock(side_effect=_at_command_mock)
+        api_mock.init_api_mode = mock.AsyncMock(side_effect=init_api_mode_mock)
 
-    with mock.patch.object(XBee, "new") as api:
-        api.return_value._at_command = mock.AsyncMock(side_effect=_at_command_mock)
-        api.return_value.init_api_mode = mock.AsyncMock(side_effect=init_api_mode_mock)
-        await app.startup(auto_form=auto_form)
+        XBee_mock.new = mock.AsyncMock(return_value=api_mock)
+
+        await app.connect()
+
+    app.form_network = mock.AsyncMock()
+    await app.load_network_info()
+    await app.start_network()
     return app
 
 
-@pytest.mark.asyncio
-async def test_startup_ai(app):
-    auto_form = True
-    await _test_startup(app, 0x00, auto_form)
+async def test_start_network(app):
+    await _test_start_network(app, ai_status=0x00)
+    assert app.state.node_info.nwk == 0x0000
+    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
+
+    await _test_start_network(app, ai_status=0x00)
     assert app.state.node_info.nwk == 0x0000
     assert app.state.node_info.ieee == t.EUI64(range(1, 9))
     assert app.form_network.call_count == 0
 
-    auto_form = False
-    await _test_startup(app, 0x00, auto_form)
+    with pytest.raises(zigpy.exceptions.NetworkNotFormed):
+        await _test_start_network(app, ai_status=0x06)
+
+    with pytest.raises(zigpy.exceptions.NetworkNotFormed):
+        await _test_start_network(app, ai_status=0x00, zs=1)
+
+    with pytest.raises(zigpy.exceptions.NetworkNotFormed):
+        await _test_start_network(app, ai_status=0x06, legacy_module=True)
+
+    with pytest.raises(zigpy.exceptions.NetworkNotFormed):
+        await _test_start_network(app, ai_status=0x00, zs=1, legacy_module=True)
+
+
+async def test_start_network_no_api_mode(app):
+    await _test_start_network(app, ai_status=0x00, api_mode=False)
     assert app.state.node_info.nwk == 0x0000
     assert app.state.node_info.ieee == t.EUI64(range(1, 9))
-    assert app.form_network.call_count == 0
-
-    auto_form = True
-    await _test_startup(app, 0x06, auto_form)
-    assert app.state.node_info.nwk == 0xFFFE
-    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
-    assert app.form_network.call_count == 1
-
-    auto_form = False
-    await _test_startup(app, 0x06, auto_form)
-    assert app.state.node_info.nwk == 0xFFFE
-    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
-    assert app.form_network.call_count == 0
-
-    auto_form = True
-    await _test_startup(app, 0x00, auto_form, zs=1)
-    assert app.state.node_info.nwk == 0x0000
-    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
-    assert app.form_network.call_count == 1
-
-    auto_form = False
-    await _test_startup(app, 0x06, auto_form, legacy_module=True)
-    assert app.state.node_info.nwk == 0xFFFE
-    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
-    assert app.form_network.call_count == 0
-
-    auto_form = True
-    await _test_startup(app, 0x00, auto_form, zs=1, legacy_module=True)
-    assert app.state.node_info.nwk == 0x0000
-    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
-    assert app.form_network.call_count == 1
-
-
-@pytest.mark.asyncio
-async def test_startup_no_api_mode(app):
-    auto_form = True
-    await _test_startup(app, 0x00, auto_form, api_mode=False)
-    assert app.state.node_info.nwk == 0x0000
-    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
-    assert app.form_network.call_count == 0
     assert app._api.init_api_mode.call_count == 1
     assert app._api._at_command.call_count >= 16
 
 
-@pytest.mark.asyncio
-async def test_startup_api_mode_config_fails(app):
-    auto_form = True
-    await _test_startup(app, 0x00, auto_form, api_mode=False, api_config_succeeds=False)
-    assert app.state.node_info.nwk == mock.sentinel.nwk
-    assert app.state.node_info.ieee is None
-    assert app.form_network.call_count == 0
+async def test_start_network_api_mode_config_fails(app):
+    with pytest.raises(zigpy.exceptions.ControllerException):
+        await _test_start_network(
+            app, ai_status=0x00, api_mode=False, api_config_succeeds=False
+        )
+
     assert app._api.init_api_mode.call_count == 1
     assert app._api._at_command.call_count == 1
 
 
-@pytest.mark.asyncio
 async def test_permit(app):
     app._api._at_command = mock.AsyncMock()
     time_s = 30
@@ -442,31 +432,26 @@ async def _test_request(
     )
 
 
-@pytest.mark.asyncio
 async def test_request_with_reply(app):
     r = await _test_request(app, expect_reply=True, send_success=True)
     assert r[0] == 0
 
 
-@pytest.mark.asyncio
 async def test_request_without_node_desc(app):
     r = await _test_request(app, expect_reply=True, send_success=True, node_desc=False)
     assert r[0] == 0
 
 
-@pytest.mark.asyncio
 async def test_request_send_timeout(app):
     r = await _test_request(app, send_timeout=True)
     assert r[0] != 0
 
 
-@pytest.mark.asyncio
 async def test_request_send_fail(app):
     r = await _test_request(app, send_success=False)
     assert r[0] != 0
 
 
-@pytest.mark.asyncio
 async def test_request_extended_timeout(app):
     is_end_device = False
     r = await _test_request(app, True, True, is_end_device=is_end_device)
@@ -489,12 +474,10 @@ async def test_request_extended_timeout(app):
     app._api._command.reset_mock()
 
 
-@pytest.mark.asyncio
 async def test_force_remove(app):
     await app.force_remove(mock.sentinel.device)
 
 
-@pytest.mark.asyncio
 async def test_shutdown(app):
     app._api.close = mock.MagicMock()
     await app.shutdown()
@@ -576,19 +559,16 @@ async def _test_mrequest(app, send_success=True, send_timeout=False, **kwargs):
     return await app.mrequest(group_id, 0x0260, 1, 2, seq, b"\xaa\x55\xbe\xef")
 
 
-@pytest.mark.asyncio
 async def test_mrequest_with_reply(app):
     r = await _test_mrequest(app, send_success=True)
     assert r[0] == 0
 
 
-@pytest.mark.asyncio
 async def test_mrequest_send_timeout(app):
     r = await _test_mrequest(app, send_timeout=True)
     assert r[0] != 0
 
 
-@pytest.mark.asyncio
 async def test_mrequest_send_fail(app):
     r = await _test_mrequest(app, send_success=False)
     assert r[0] != 0

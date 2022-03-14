@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import asyncio
 import binascii
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 import zigpy.application
 import zigpy.config
@@ -37,9 +39,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
     probe = zigpy_xbee.api.XBee.probe
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config=zigpy.config.ZIGPY_SCHEMA(config))
-        self._api: Optional[zigpy_xbee.api.XBee] = None
+        self._api: zigpy_xbee.api.XBee | None = None
 
     async def disconnect(self):
         """Shutdown application."""
@@ -59,12 +61,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 )
 
     async def start_network(self):
-        try:
-            association_state = await asyncio.wait_for(
-                self._get_association_state(), timeout=4
-            )
-        except asyncio.TimeoutError:
-            association_state = 0xFF
+        association_state = await asyncio.wait_for(
+            self._get_association_state(), timeout=4
+        )
 
         # Enable ZDO passthrough
         await self._api._at_command("AO", 0x03)
@@ -73,15 +72,13 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         enc_options = await self._api._at_command("EO")
         zb_profile = await self._api._at_command("ZS")
 
-        should_form = (
-            enc_enabled != 1,
-            enc_options != 2,
-            zb_profile != 2,
-            association_state != 0,
-            self.state.node_info.nwk != 0x0000,
-        )
-
-        if any(should_form):
+        if (
+            enc_enabled != 1
+            or enc_options != 2
+            or zb_profile != 2
+            or association_state != 0
+            or self.state.node_info.nwk != 0x0000
+        ):
             raise zigpy.exceptions.NetworkNotFormed("Network is not formed")
 
         # Disable joins
@@ -108,13 +105,17 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         serial_high = await self._api._at_command("SH")
         serial_low = await self._api._at_command("SL")
         node_info.ieee = zigpy.types.EUI64(
-            serial_high.to_bytes(4, "big") + serial_low.to_bytes(4, "big")
+            (serial_high.to_bytes(4, "big") + serial_low.to_bytes(4, "big"))[::-1]
         )
 
-        if await self._api._at_command("CE") == 0x01:
+        try:
+            if await self._api._at_command("CE") == 0x01:
+                node_info.logical_type = zdo_t.LogicalType.Coordinator
+            else:
+                node_info.logical_type = zdo_t.LogicalType.EndDevice
+        except RuntimeError:
+            LOGGER.warning("CE command failed, assuming node is coordinator")
             node_info.logical_type = zdo_t.LogicalType.Coordinator
-        else:
-            node_info.logical_type = zdo_t.LogicalType.EndDevice
 
         # Load network info
         network_info = self.state.network_info
@@ -140,7 +141,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._api._queued_at("SP", CONF_CYCLIC_SLEEP_PERIOD)
         await self._api._queued_at("SN", CONF_POLL_TIMEOUT)
         await self._api._queued_at("SM", 0)
-        await self._api._queued_at("CE", 1)
+
+        try:
+            await self._api._queued_at("CE", 1)
+        except RuntimeError:
+            pass
+
         await self._api._at_command("WR")
 
         await asyncio.wait_for(self._api.coordinator_started_event.wait(), timeout=10)

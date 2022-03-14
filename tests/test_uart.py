@@ -31,7 +31,6 @@ def test_baudrate_fail(gw):
         gw.baudrate = 3333
 
 
-@pytest.mark.asyncio
 async def test_connect(monkeypatch):
     api = mock.MagicMock()
 
