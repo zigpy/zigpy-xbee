@@ -224,9 +224,8 @@ async def test_broadcast(app):
 @pytest.mark.asyncio
 async def test_get_association_state(app):
     ai_results = (0xFF, 0xFF, 0xFF, 0xFF, mock.sentinel.ai)
-    app._api._at_command = mock.MagicMock(
-        spec=XBee._at_command,
-        side_effect=asyncio.coroutine(mock.MagicMock(side_effect=ai_results)),
+    app._api._at_command = mock.AsyncMock(
+        spec=XBee._at_command, side_effect=ai_results,
     )
     ai = await app._get_association_state()
     assert app._api._at_command.call_count == len(ai_results)
@@ -252,9 +251,9 @@ async def test_form_network(app):
     app._api._queued_at = mock.MagicMock(
         spec=XBee._at_command, side_effect=mock_at_command
     )
-    app._get_association_state = mock.MagicMock(
+    app._get_association_state = mock.AsyncMock(
         spec=application.ControllerApplication._get_association_state,
-        side_effect=asyncio.coroutine(mock.MagicMock(return_value=0x00)),
+        return_value=0x00,
     )
 
     await app.form_network()
@@ -391,9 +390,7 @@ async def test_startup_api_mode_config_fails(app):
 
 @pytest.mark.asyncio
 async def test_permit(app):
-    app._api._at_command = mock.MagicMock(
-        side_effect=asyncio.coroutine(mock.MagicMock())
-    )
+    app._api._at_command = mock.AsyncMock()
     time_s = 30
     await app.permit_ncp(time_s)
     assert app._api._at_command.call_count == 3
