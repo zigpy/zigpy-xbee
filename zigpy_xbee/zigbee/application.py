@@ -131,16 +131,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._api._queued_at("EE", 1)
         await self._api._queued_at("EO", 2)
 
-        key_as_int = int.from_bytes(network_info.network_key.key.serialize(), "big")
-        await self._api._queued_at("NK", key_as_int)
-
-        tclk_as_int = int.from_bytes(network_info.tc_link_key.key.serialize(), "big")
-        await self._api._queued_at("KY", tclk_as_int)
+        await self._api._queued_at("NK", network_info.network_key.key.serialize())
+        await self._api._queued_at("KY", network_info.tc_link_key.key.serialize())
 
         await self._api._queued_at("NJ", 0)
         await self._api._queued_at("SP", CONF_CYCLIC_SLEEP_PERIOD)
         await self._api._queued_at("SN", CONF_POLL_TIMEOUT)
-        await self._api._queued_at("SM", 0)
 
         try:
             await self._api._queued_at("CE", 1)

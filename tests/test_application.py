@@ -268,9 +268,7 @@ async def test_form_network(app):
     network_info = app.write_network_info.mock_calls[0][2]["network_info"]
 
     app._api._queued_at.assert_any_call("SC", 1 << (network_info.channel - 11))
-    app._api._queued_at.assert_any_call(
-        "KY", int.from_bytes(b"ZigBeeAlliance09", "big")
-    )
+    app._api._queued_at.assert_any_call("KY", b"ZigBeeAlliance09")
 
     app._api._at_command.reset_mock()
     app._api._queued_at.reset_mock()
@@ -282,9 +280,7 @@ async def test_form_network(app):
     network_info = app.write_network_info.mock_calls[0][2]["network_info"]
 
     app._api._queued_at.assert_any_call("SC", 1 << (network_info.channel - 11))
-    app._api._queued_at.assert_any_call(
-        "KY", int.from_bytes(b"ZigBeeAlliance09", "big")
-    )
+    app._api._queued_at.assert_any_call("KY", b"ZigBeeAlliance09")
 
 
 async def _test_start_network(
