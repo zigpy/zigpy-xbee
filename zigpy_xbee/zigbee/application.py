@@ -207,8 +207,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             return TXStatus.NETWORK_ACK_FAILURE, "Timeout waiting for ACK"
 
         if v != TXStatus.SUCCESS:
-            return v, "Error sending tsn #%s: %s".format(sequence, v.name)
-        return v, "Successfully sent tsn #%s: %s".format(sequence, v.name)
+            return v, f"Error sending tsn #{sequence}: {v.name}"
+        return v, f"Successfully sent tsn #{sequence}: {v.name}"
 
     async def request(
         self,
@@ -261,8 +261,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             return TXStatus.NETWORK_ACK_FAILURE, "Timeout waiting for ACK"
 
         if v != TXStatus.SUCCESS:
-            return v, "Error sending tsn #%s: %s".format(sequence, v.name)
-        return v, "Succesfuly sent tsn #%s: %s".format(sequence, v.name)
+            return v, f"Error sending tsn #{sequence}: {v.name}"
+        return v, f"Succesfuly sent tsn #{sequence}: {v.name}"
 
     @zigpy.util.retryable_request
     def remote_at_command(
@@ -384,8 +384,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             return TXStatus.NETWORK_ACK_FAILURE, "Timeout waiting for ACK"
 
         if v != TXStatus.SUCCESS:
-            return v, "Error sending broadcast tsn #%s: %s".format(sequence, v.name)
-        return v, "Succesfuly sent broadcast tsn #%s: %s".format(sequence, v.name)
+            return v, f"Error sending broadcast tsn #{sequence}: {v.name}"
+        return v, f"Succesfuly sent broadcast tsn #{sequence}: {v.name}"
 
 
 class XBeeCoordinator(zigpy.quirks.CustomDevice):
