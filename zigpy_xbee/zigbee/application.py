@@ -13,6 +13,7 @@ import zigpy.exceptions
 import zigpy.quirks
 import zigpy.types
 import zigpy.util
+from zigpy.zcl import foundation
 from zigpy.zcl.clusters.general import Groups
 import zigpy.zdo.types as zdo_t
 
@@ -394,13 +395,15 @@ class XBeeCoordinator(zigpy.quirks.CustomDevice):
         cluster_id = 0x0006
 
     class XBeeGroupResponse(zigpy.quirks.CustomCluster, Groups):
-        import zigpy.zcl.foundation as f
-
         cluster_id = 0x8006
         ep_attribute = "xbee_groups_response"
 
-        client_commands = {**Groups.client_commands}
-        client_commands[0x0004] = ("remove_all_response", (f.Status,), True)
+        client_commands = {
+            **Groups.client_commands,
+            0x04: foundation.ZCLCommandDef(
+                "remove_all_response", {"status": foundation.Status}, is_reply=True
+            ),
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
