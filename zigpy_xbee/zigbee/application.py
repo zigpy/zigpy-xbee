@@ -155,6 +155,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         """Forcibly remove device from NCP."""
         pass
 
+    async def add_endpoint(self, descriptor):
+        """Register a new endpoint on the device."""
+        # This is not provided by the XBee API
+        pass
+
     async def _get_association_state(self):
         """Wait for Zigbee to start."""
         state = await self._api._at_command("AI")
