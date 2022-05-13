@@ -30,6 +30,9 @@ def app(monkeypatch):
     api = XBee(APP_CONFIG[config.CONF_DEVICE])
     monkeypatch.setattr(api, "_command", mock.AsyncMock())
     app._api = api
+
+    app.state.node_info.nwk = 0x0000
+    app.state.node_info.ieee = t.EUI64.convert("aa:bb:cc:dd:ee:ff:00:11")
     return app
 
 
@@ -94,7 +97,7 @@ def test_rx_nwk_0000(app):
         b"",
     )
     assert app.handle_message.call_count == 1
-    assert app.get_device.call_count == 1
+    assert app.get_device.call_count == 2
 
 
 def test_rx_unknown_device(app, device):
@@ -103,7 +106,8 @@ def test_rx_unknown_device(app, device):
     app.handle_join = mock.MagicMock()
     dev = device(nwk=0x1234)
     app.devices[dev.ieee] = dev
-    app.get_device = mock.MagicMock(side_effect=[KeyError, dev])
+
+    num_before_rx = len(app.devices)
     app.handle_rx(
         b"\x08\x07\x06\x05\x04\x03\x02\x01",
         0x3334,
@@ -115,8 +119,8 @@ def test_rx_unknown_device(app, device):
         b"",
     )
     assert app.handle_join.call_count == 1
-    assert app.get_device.call_count == 2
     assert app.handle_message.call_count == 1
+    assert len(app.devices) == num_before_rx
 
 
 def test_rx_unknown_device_ieee(app):
@@ -135,7 +139,7 @@ def test_rx_unknown_device_ieee(app):
         b"",
     )
     assert app.handle_join.call_count == 0
-    assert app.get_device.call_count == 1
+    assert app.get_device.call_count == 2
     assert app.handle_message.call_count == 0
 
 
@@ -224,7 +228,8 @@ async def test_broadcast(app):
 async def test_get_association_state(app):
     ai_results = (0xFF, 0xFF, 0xFF, 0xFF, mock.sentinel.ai)
     app._api._at_command = mock.AsyncMock(
-        spec=XBee._at_command, side_effect=ai_results,
+        spec=XBee._at_command,
+        side_effect=ai_results,
     )
     ai = await app._get_association_state()
     assert app._api._at_command.call_count == len(ai_results)

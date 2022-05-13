@@ -178,7 +178,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         data,
         *,
         hops=0,
-        non_member_radius=3
+        non_member_radius=3,
     ):
         """Submit and send data out as a multicast transmission.
         :param group_id: destination multicast address
@@ -316,9 +316,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self.handle_join(nwk, ieee, 0)
 
         try:
-            self.devices[self.state.node_info.ieee].last_seen = time.time()
+            self._device.last_seen = time.time()
         except KeyError:
             pass
+
         try:
             device = self.get_device(nwk=src_nwk)
         except KeyError:

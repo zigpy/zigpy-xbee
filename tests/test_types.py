@@ -24,20 +24,20 @@ def test_serialize():
 
 
 def test_bytes_serialize():
-    data = 0x89AB .to_bytes(4, "big")
+    data = 0x89AB.to_bytes(4, "big")
     result = t.Bytes(data).serialize()
     assert result == data
 
 
 def test_bytes_deserialize():
-    data, rest = t.Bytes.deserialize(0x89AB .to_bytes(3, "big"))
+    data, rest = t.Bytes.deserialize(0x89AB.to_bytes(3, "big"))
     assert data == b"\x00\x89\xAB"
     assert rest == b""
 
 
 def test_atcommand():
     cmd = "AI".encode("ascii")
-    data = 0x06 .to_bytes(4, "big")
+    data = 0x06.to_bytes(4, "big")
     r_cmd, r_data = t.ATCommand.deserialize(cmd + data)
 
     assert r_cmd == cmd

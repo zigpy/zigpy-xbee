@@ -284,7 +284,7 @@ class XBee:
         application: "zigpy_xbee.zigbee.application.ControllerApplication",
         config: Dict[str, Any],
     ) -> "XBee":
-        """Create new instance from """
+        """Create new instance from"""
         xbee_api = cls(config)
         await xbee_api.connect()
         xbee_api.set_application(application)
