@@ -17,6 +17,7 @@ from zigpy.zcl import foundation
 from zigpy.zcl.clusters.general import Groups
 import zigpy.zdo.types as zdo_t
 
+import zigpy_xbee
 import zigpy_xbee.api
 from zigpy_xbee.config import CONF_DEVICE, CONFIG_SCHEMA, SCHEMA_DEVICE
 from zigpy_xbee.types import EUI64, UNKNOWN_IEEE, UNKNOWN_NWK, TXStatus
@@ -120,6 +121,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         # Load network info
         network_info = self.state.network_info
+        network_info.source = f"zigpy-xbee@{zigpy_xbee.__version__}"
         network_info.pan_id = await self._api._at_command("OI")
         network_info.extended_pan_id = await self._api._at_command("ID")
         network_info.channel = await self._api._at_command("CH")
