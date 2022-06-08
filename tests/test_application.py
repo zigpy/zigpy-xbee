@@ -309,10 +309,10 @@ async def _test_start_network(
             "CE": 1 if ai_status == 0 else 0,
             "EO": eo,
             "EE": ee,
-            "ID": mock.sentinel.at_id,
+            "ID": 0x25DCF87E03EA5906,
             "MY": 0xFFFE if ai_status else 0x0000,
             "NJ": mock.sentinel.at_nj,
-            "OI": mock.sentinel.at_oi,
+            "OI": 0xDD94,
             "OP": mock.sentinel.at_op,
             "SH": 0x08070605,
             "SL": 0x04030201,
@@ -343,6 +343,10 @@ async def test_start_network(app):
     await _test_start_network(app, ai_status=0x00)
     assert app.state.node_info.nwk == 0x0000
     assert app.state.node_info.ieee == t.EUI64(range(1, 9))
+    assert app.state.network_info.pan_id == 0xDD94
+    assert app.state.network_info.extended_pan_id == t.ExtendedPanId.convert(
+        "25:dc:f8:7e:03:ea:59:06"
+    )
 
     await _test_start_network(app, ai_status=0x00)
     assert app.state.node_info.nwk == 0x0000

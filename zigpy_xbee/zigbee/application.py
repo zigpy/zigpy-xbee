@@ -120,10 +120,15 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             node_info.logical_type = zdo_t.LogicalType.Coordinator
 
         # Load network info
+        pan_id = await self._api._at_command("OI")
+        extended_pan_id = await self._api._at_command("ID")
+
         network_info = self.state.network_info
         network_info.source = f"zigpy-xbee@{zigpy_xbee.__version__}"
-        network_info.pan_id = await self._api._at_command("OI")
-        network_info.extended_pan_id = await self._api._at_command("ID")
+        network_info.pan_id = zigpy.types.PanId(pan_id)
+        network_info.extended_pan_id = zigpy.types.ExtendedPanId(
+            zigpy.types.uint64_t(extended_pan_id).serialize()
+        )
         network_info.channel = await self._api._at_command("CH")
 
     async def write_network_info(self, *, network_info, node_info):
