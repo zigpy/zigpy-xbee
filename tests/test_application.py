@@ -388,7 +388,7 @@ async def test_permit(app):
     app._api._at_command = mock.AsyncMock()
     time_s = 30
     await app.permit_ncp(time_s)
-    assert app._api._at_command.call_count == 3
+    assert app._api._at_command.call_count == 2
     assert app._api._at_command.call_args_list[0][0][1] == time_s
 
 

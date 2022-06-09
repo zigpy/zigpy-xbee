@@ -290,7 +290,6 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         assert 0 <= time_s <= 254
         await self._api._at_command("NJ", time_s)
         await self._api._at_command("AC")
-        await self._api._at_command("CB", 2)
 
     async def permit_with_key(self, node, code, time_s=60):
         raise NotImplementedError("XBee does not support install codes")
