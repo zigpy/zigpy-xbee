@@ -1,7 +1,6 @@
 import asyncio
 import logging
 
-from asynctest import CoroutineMock, mock
 import pytest
 import serial
 import zigpy.exceptions
@@ -9,6 +8,8 @@ import zigpy.exceptions
 from zigpy_xbee import api as xbee_api, types as t, uart
 import zigpy_xbee.config
 from zigpy_xbee.zigbee.application import ControllerApplication
+
+import tests.async_mock as mock
 
 DEVICE_CONFIG = zigpy_xbee.config.SCHEMA_DEVICE(
     {zigpy_xbee.config.CONF_DEVICE_PATH: "/dev/null"}
@@ -22,10 +23,9 @@ def api():
     return api
 
 
-@pytest.mark.asyncio
 async def test_connect(monkeypatch):
     api = xbee_api.XBee(DEVICE_CONFIG)
-    monkeypatch.setattr(uart, "connect", CoroutineMock())
+    monkeypatch.setattr(uart, "connect", mock.AsyncMock())
     await api.connect()
 
 
@@ -52,7 +52,6 @@ def test_commands():
         assert reply is None or isinstance(reply, int)
 
 
-@pytest.mark.asyncio
 async def test_command(api):
     def mock_api_frame(name, *args):
         c = xbee_api.COMMAND_REQUESTS[name]
@@ -90,7 +89,6 @@ async def test_command(api):
         api._uart.send.reset_mock()
 
 
-@pytest.mark.asyncio
 async def test_command_not_connected(api):
     api._uart = None
 
@@ -135,12 +133,10 @@ async def _test_at_or_queued_at_command(api, cmd, monkeypatch, do_reply=True):
         api._command.reset_mock()
 
 
-@pytest.mark.asyncio
 async def test_at_command(api, monkeypatch):
     await _test_at_or_queued_at_command(api, api._at_command, monkeypatch)
 
 
-@pytest.mark.asyncio
 async def test_at_command_no_response(api, monkeypatch):
     with pytest.raises(asyncio.TimeoutError):
         await _test_at_or_queued_at_command(
@@ -148,7 +144,6 @@ async def test_at_command_no_response(api, monkeypatch):
         )
 
 
-@pytest.mark.asyncio
 async def test_queued_at_command(api, monkeypatch):
     await _test_at_or_queued_at_command(api, api._queued_at, monkeypatch)
 
@@ -191,12 +186,10 @@ async def _test_remote_at_command(api, monkeypatch, do_reply=True):
         api._command.reset_mock()
 
 
-@pytest.mark.asyncio
 async def test_remote_at_cmd(api, monkeypatch):
     await _test_remote_at_command(api, monkeypatch)
 
 
-@pytest.mark.asyncio
 async def test_remote_at_cmd_no_rsp(api, monkeypatch):
     monkeypatch.setattr(xbee_api, "REMOTE_AT_COMMAND_TIMEOUT", 0.1)
     with pytest.raises(asyncio.TimeoutError):
@@ -417,7 +410,6 @@ def test_handle_tx_status_duplicate(api):
     assert send_fut.set_exception.call_count == 0
 
 
-@pytest.mark.asyncio
 async def test_command_mode_at_cmd(api):
     command = "+++"
 
@@ -430,7 +422,6 @@ async def test_command_mode_at_cmd(api):
     assert result
 
 
-@pytest.mark.asyncio
 async def test_command_mode_at_cmd_timeout(api):
     command = "+++"
 
@@ -462,21 +453,15 @@ def test_handle_command_mode_rsp(api):
     assert api._cmd_mode_future.result() == data
 
 
-@pytest.mark.asyncio
 async def test_enter_at_command_mode(api):
-    api.command_mode_at_cmd = mock.MagicMock(
-        side_effect=asyncio.coroutine(lambda x: mock.sentinel.at_response)
-    )
+    api.command_mode_at_cmd = mock.AsyncMock(return_value=mock.sentinel.at_response)
 
     res = await api.enter_at_command_mode()
     assert res == mock.sentinel.at_response
 
 
-@pytest.mark.asyncio
 async def test_api_mode_at_commands(api):
-    api.command_mode_at_cmd = mock.MagicMock(
-        side_effect=asyncio.coroutine(lambda x: mock.sentinel.api_mode)
-    )
+    api.command_mode_at_cmd = mock.AsyncMock(return_value=mock.sentinel.api_mode)
 
     res = await api.api_mode_at_commands(57600)
     assert res is True
@@ -491,20 +476,15 @@ async def test_api_mode_at_commands(api):
     assert res is None
 
 
-@pytest.mark.asyncio
 async def test_init_api_mode(api, monkeypatch):
     monkeypatch.setattr(api._uart, "baudrate", 57600)
-    api.enter_at_command_mode = mock.MagicMock(
-        side_effect=asyncio.coroutine(mock.MagicMock(return_value=True))
-    )
+    api.enter_at_command_mode = mock.AsyncMock(return_value=True)
 
     res = await api.init_api_mode()
     assert res is None
     assert api.enter_at_command_mode.call_count == 1
 
-    api.enter_at_command_mode = mock.MagicMock(
-        side_effect=asyncio.coroutine(mock.MagicMock(return_value=False))
-    )
+    api.enter_at_command_mode = mock.AsyncMock(return_value=False)
 
     res = await api.init_api_mode()
     assert res is False
@@ -517,9 +497,7 @@ async def test_init_api_mode(api, monkeypatch):
 
     api._uart.baudrate = 57600
     api.enter_at_command_mode = mock.MagicMock(side_effect=enter_at_mode)
-    api.api_mode_at_commands = mock.MagicMock(
-        side_effect=asyncio.coroutine(mock.MagicMock(return_value=True))
-    )
+    api.api_mode_at_commands = mock.AsyncMock(return_value=True)
 
     res = await api.init_api_mode()
     assert res is True
@@ -542,21 +520,16 @@ def test_handle_many_to_one_rri(api):
     api._handle_many_to_one_rri(ieee, nwk, 0)
 
 
-@pytest.mark.asyncio
 async def test_reconnect_multiple_disconnects(monkeypatch, caplog):
     api = xbee_api.XBee(DEVICE_CONFIG)
-    connect_mock = CoroutineMock()
-    connect_mock.return_value = asyncio.Future()
-    connect_mock.return_value.set_result(True)
+    connect_mock = mock.AsyncMock(return_value=True)
     monkeypatch.setattr(uart, "connect", connect_mock)
 
     await api.connect()
 
     caplog.set_level(logging.DEBUG)
-    connected = asyncio.Future()
-    connected.set_result(mock.sentinel.uart_reconnect)
     connect_mock.reset_mock()
-    connect_mock.side_effect = [asyncio.Future(), connected]
+    connect_mock.side_effect = [OSError, mock.sentinel.uart_reconnect]
     api.connection_lost("connection lost")
     await asyncio.sleep(0.3)
     api.connection_lost("connection lost 2")
@@ -567,21 +540,20 @@ async def test_reconnect_multiple_disconnects(monkeypatch, caplog):
     assert connect_mock.call_count == 2
 
 
-@pytest.mark.asyncio
 async def test_reconnect_multiple_attempts(monkeypatch, caplog):
     api = xbee_api.XBee(DEVICE_CONFIG)
-    connect_mock = CoroutineMock()
-    connect_mock.return_value = asyncio.Future()
-    connect_mock.return_value.set_result(True)
+    connect_mock = mock.AsyncMock(return_value=True)
     monkeypatch.setattr(uart, "connect", connect_mock)
 
     await api.connect()
 
     caplog.set_level(logging.DEBUG)
-    connected = asyncio.Future()
-    connected.set_result(mock.sentinel.uart_reconnect)
     connect_mock.reset_mock()
-    connect_mock.side_effect = [asyncio.TimeoutError, OSError, connected]
+    connect_mock.side_effect = [
+        asyncio.TimeoutError,
+        OSError,
+        mock.sentinel.uart_reconnect,
+    ]
 
     with mock.patch("asyncio.sleep"):
         api.connection_lost("connection lost")
@@ -591,8 +563,7 @@ async def test_reconnect_multiple_attempts(monkeypatch, caplog):
     assert connect_mock.call_count == 3
 
 
-@pytest.mark.asyncio
-@mock.patch.object(xbee_api.XBee, "_at_command", new_callable=CoroutineMock)
+@mock.patch.object(xbee_api.XBee, "_at_command", new_callable=mock.AsyncMock)
 @mock.patch.object(uart, "connect")
 async def test_probe_success(mock_connect, mock_at_cmd):
     """Test device probing."""
@@ -606,7 +577,6 @@ async def test_probe_success(mock_connect, mock_at_cmd):
     assert mock_connect.return_value.close.call_count == 1
 
 
-@pytest.mark.asyncio
 @mock.patch.object(xbee_api.XBee, "init_api_mode", return_value=True)
 @mock.patch.object(xbee_api.XBee, "_at_command", side_effect=asyncio.TimeoutError)
 @mock.patch.object(uart, "connect")
@@ -623,7 +593,6 @@ async def test_probe_success_api_mode(mock_connect, mock_at_cmd, mock_api_mode):
     assert mock_connect.return_value.close.call_count == 1
 
 
-@pytest.mark.asyncio
 @mock.patch.object(xbee_api.XBee, "init_api_mode")
 @mock.patch.object(xbee_api.XBee, "_at_command", side_effect=asyncio.TimeoutError)
 @mock.patch.object(uart, "connect")
@@ -648,7 +617,6 @@ async def test_probe_fail(mock_connect, mock_at_cmd, mock_api_mode, exception):
     assert mock_connect.return_value.close.call_count == 1
 
 
-@pytest.mark.asyncio
 @mock.patch.object(xbee_api.XBee, "init_api_mode", return_value=False)
 @mock.patch.object(xbee_api.XBee, "_at_command", side_effect=asyncio.TimeoutError)
 @mock.patch.object(uart, "connect")
@@ -668,7 +636,6 @@ async def test_probe_fail_api_mode(mock_connect, mock_at_cmd, mock_api_mode):
     assert mock_connect.return_value.close.call_count == 1
 
 
-@pytest.mark.asyncio
 @mock.patch.object(xbee_api.XBee, "connect")
 async def test_xbee_new(conn_mck):
     """Test new class method."""
