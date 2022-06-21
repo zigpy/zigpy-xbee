@@ -284,7 +284,7 @@ class XBee:
         application: "zigpy_xbee.zigbee.application.ControllerApplication",
         config: Dict[str, Any],
     ) -> "XBee":
-        """Create new instance from """
+        """Create new instance from"""
         xbee_api = cls(config)
         await xbee_api.connect()
         xbee_api.set_application(application)
@@ -313,7 +313,7 @@ class XBee:
         self._uart = None
         if self._conn_lost_task and not self._conn_lost_task.done():
             self._conn_lost_task.cancel()
-        self._conn_lost_task = asyncio.ensure_future(self._connection_lost())
+        self._conn_lost_task = asyncio.create_task(self._connection_lost())
 
     async def _connection_lost(self) -> None:
         """Reconnect serial port."""
@@ -321,6 +321,7 @@ class XBee:
             await self._reconnect_till_done()
         except asyncio.CancelledError:
             LOGGER.debug("Cancelling reconnection attempt")
+            raise
 
     async def _reconnect_till_done(self) -> None:
         attempt = 1
