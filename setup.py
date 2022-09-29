@@ -16,7 +16,7 @@ setup(
     author="Russell Cloran",
     author_email="rcloran@gmail.com",
     license="GPL-3.0",
-    packages=find_packages(exclude=["*.tests"]),
+    packages=find_packages(exclude=["tests","tests.*"]),
     install_requires=["pyserial-asyncio", "zigpy>=0.47.0"],
     tests_require=["pytest", "asynctest", "pytest-asyncio"],
 )
