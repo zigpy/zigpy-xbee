@@ -239,3 +239,11 @@ class DiscoveryStatus(uint8_t, UndefinedEnum):
     ADDRESS_AND_ROUTE = 0x03
     EXTENDED_TIMEOUT = 0x40
     _UNDEFINED = 0x00
+
+
+class TXOptions(zigpy.types.bitmap8):
+    NONE = 0x00
+
+    Disable_Retries_and_Route_Repair = 0x01
+    Enable_APS_Encryption = 0x20
+    Use_Extended_TX_Timeout = 0x40

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import binascii
 import logging
 import time
 from typing import Any
@@ -20,7 +19,7 @@ import zigpy.zdo.types as zdo_t
 import zigpy_xbee
 import zigpy_xbee.api
 from zigpy_xbee.config import CONF_DEVICE, CONFIG_SCHEMA, SCHEMA_DEVICE
-from zigpy_xbee.types import EUI64, UNKNOWN_IEEE, UNKNOWN_NWK, TXStatus
+from zigpy_xbee.types import EUI64, UNKNOWN_IEEE, UNKNOWN_NWK, TXOptions, TXStatus
 
 # how long coordinator would hold message for an end device in 10ms units
 CONF_CYCLIC_SLEEP_PERIOD = 0x0300
@@ -177,101 +176,55 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             state = await self._api._at_command("AI")
         return state
 
-    async def mrequest(
-        self,
-        group_id,
-        profile,
-        cluster,
-        src_ep,
-        sequence,
-        data,
-        *,
-        hops=0,
-        non_member_radius=3,
-    ):
-        """Submit and send data out as a multicast transmission.
-        :param group_id: destination multicast address
-        :param profile: Zigbee Profile ID to use for outgoing message
-        :param cluster: cluster id where the message is being sent
-        :param src_ep: source endpoint id
-        :param sequence: transaction sequence number of the message
-        :param data: Zigbee message payload
-        :param hops: the message will be delivered to all nodes within this number of
-                     hops of the sender. A value of zero is converted to MAX_HOPS
-        :param non_member_radius: the number of hops that the message will be forwarded
-                                  by devices that are not members of the group. A value
-                                  of 7 or greater is treated as infinite
-        :returns: return a tuple of a status and an error_message. Original requestor
-                  has more context to provide a more meaningful error message
-        """
-        LOGGER.debug("Zigbee request tsn #%s: %s", sequence, binascii.hexlify(data))
+    async def send_packet(self, packet: zigpy.types.ZigbeePacket) -> None:
+        LOGGER.debug("Sending packet %r", packet)
+
+        tx_opts = TXOptions.NONE
+
+        if packet.extended_timeout:
+            tx_opts |= TXOptions.Use_Extended_TX_Timeout
+
+        if packet.dst.addr_mode == zigpy.types.AddrMode.Group:
+            tx_opts |= 0x08  # where did this come from?
+
+        long_addr = UNKNOWN_IEEE
+        short_addr = UNKNOWN_NWK
+
+        if packet.dst.addr_mode == zigpy.types.AddrMode.IEEE:
+            long_addr = packet.dst.address
+        elif packet.dst.addr_mode == zigpy.types.AddrMode.Broadcast:
+            long_addr = EUI64(
+                [
+                    zigpy.types.uint8_t(b)
+                    for b in packet.dst.address.to_bytes(8, "little")
+                ]
+            )
+        else:
+            short_addr = packet.dst.address
 
         send_req = self._api.tx_explicit(
-            UNKNOWN_IEEE, group_id, src_ep, src_ep, cluster, profile, hops, 0x08, data
-        )
-
-        try:
-            v = await asyncio.wait_for(send_req, timeout=TIMEOUT_TX_STATUS)
-        except asyncio.TimeoutError:
-            return TXStatus.NETWORK_ACK_FAILURE, "Timeout waiting for ACK"
-
-        if v != TXStatus.SUCCESS:
-            return v, f"Error sending tsn #{sequence}: {v.name}"
-        return v, f"Successfully sent tsn #{sequence}: {v.name}"
-
-    async def request(
-        self,
-        device,
-        profile,
-        cluster,
-        src_ep,
-        dst_ep,
-        sequence,
-        data,
-        expect_reply=True,
-        use_ieee=False,
-    ):
-        """Submit and send data out as an unicast transmission.
-
-        :param device: destination device
-        :param profile: Zigbee Profile ID to use for outgoing message
-        :param cluster: cluster id where the message is being sent
-        :param src_ep: source endpoint id
-        :param dst_ep: destination endpoint id
-        :param sequence: transaction sequence number of the message
-        :param data: Zigbee message payload
-        :param expect_reply: True if this is essentially a request
-        :param use_ieee: use EUI64 for destination addressing
-        :returns: return a tuple of a status and an error_message. Original requestor
-                  has more context to provide a more meaningful error message
-        """
-        LOGGER.debug("Zigbee request tsn #%s: %s", sequence, binascii.hexlify(data))
-
-        tx_opts = 0x00
-        if expect_reply and (
-            device.node_desc is None or device.node_desc.is_end_device
-        ):
-            tx_opts |= 0x40
-        send_req = self._api.tx_explicit(
-            device.ieee,
-            UNKNOWN_NWK if use_ieee else device.nwk,
-            src_ep,
-            dst_ep,
-            cluster,
-            profile,
-            0,
+            long_addr,
+            short_addr,
+            packet.src_ep,
+            packet.dst_ep,
+            packet.cluster_id,
+            packet.profile_id,
+            packet.radius,
             tx_opts,
-            data,
+            packet.data.serialize(),
         )
 
         try:
             v = await asyncio.wait_for(send_req, timeout=TIMEOUT_TX_STATUS)
         except asyncio.TimeoutError:
-            return TXStatus.NETWORK_ACK_FAILURE, "Timeout waiting for ACK"
+            raise zigpy.exceptions.DeliveryError(
+                "Timeout waiting for ACK", status=TXStatus.NETWORK_ACK_FAILURE
+            )
 
         if v != TXStatus.SUCCESS:
-            return v, f"Error sending tsn #{sequence}: {v.name}"
-        return v, f"Succesfuly sent tsn #{sequence}: {v.name}"
+            raise zigpy.exceptions.DeliveryError(
+                f"Failed to deliver packet: {v!r}", status=v
+            )
 
     @zigpy.util.retryable_request
     def remote_at_command(
@@ -343,57 +296,6 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 return
 
         self.handle_message(device, profile_id, cluster_id, src_ep, dst_ep, data)
-
-    async def broadcast(
-        self,
-        profile,
-        cluster,
-        src_ep,
-        dst_ep,
-        grpid,
-        radius,
-        sequence,
-        data,
-        broadcast_address=zigpy.types.BroadcastAddress.RX_ON_WHEN_IDLE,
-    ):
-        """Submit and send data out as an broadcast transmission.
-
-        :param profile: Zigbee Profile ID to use for outgoing message
-        :param cluster: cluster id where the message is being sent
-        :param src_ep: source endpoint id
-        :param dst_ep: destination endpoint id
-        :param grpid: group id to address the broadcast to
-        :param radius: max radius of the broadcast
-        :param sequence: transaction sequence number of the message
-        :param data: zigbee message payload
-        :param broadcast_address: broadcast address.
-        :returns: return a tuple of a status and an error_message. Original requestor
-                  has more context to provide a more meaningful error message
-        """
-
-        LOGGER.debug("Broadcast request seq %s", sequence)
-        broadcast_as_bytes = [
-            zigpy.types.uint8_t(b) for b in broadcast_address.to_bytes(8, "little")
-        ]
-        request = self._api.tx_explicit(
-            EUI64(broadcast_as_bytes),
-            broadcast_address,
-            src_ep,
-            dst_ep,
-            cluster,
-            profile,
-            radius,
-            0x00,
-            data,
-        )
-        try:
-            v = await asyncio.wait_for(request, timeout=TIMEOUT_TX_STATUS)
-        except asyncio.TimeoutError:
-            return TXStatus.NETWORK_ACK_FAILURE, "Timeout waiting for ACK"
-
-        if v != TXStatus.SUCCESS:
-            return v, f"Error sending broadcast tsn #{sequence}: {v.name}"
-        return v, f"Succesfuly sent broadcast tsn #{sequence}: {v.name}"
 
 
 class XBeeCoordinator(zigpy.quirks.CustomDevice):
