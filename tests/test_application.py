@@ -242,6 +242,14 @@ async def test_form_network(app):
     async def mock_at_command(cmd, *args):
         if cmd == "MY":
             return 0x0000
+        if cmd == "OI":
+            return 0x1234
+        elif cmd == "ID":
+            return 0x1234567812345678
+        elif cmd == "SL":
+            return 0x11223344
+        elif cmd == "SH":
+            return 0x55667788
         elif cmd == "WR":
             app._api.coordinator_started_event.set()
         elif cmd == "CE" and legacy_module:
