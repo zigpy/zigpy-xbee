@@ -571,3 +571,19 @@ async def test_mrequest_send_timeout(app):
 async def test_mrequest_send_fail(app):
     with pytest.raises(zigpy.exceptions.DeliveryError):
         await _test_mrequest(app, send_success=False)
+
+
+async def test_reset_network_info(app):
+    async def mock_at_command(cmd, *args):
+        if cmd == "NR":
+            return 0x00
+
+        return None
+
+    app._api._at_command = mock.MagicMock(
+        spec=XBee._at_command, side_effect=mock_at_command
+    )
+
+    await app.reset_network_info()
+
+    app._api._at_command.assert_called_once_with("NR", 0)

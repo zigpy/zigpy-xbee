@@ -130,6 +130,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         )
         network_info.channel = await self._api._at_command("CH")
 
+    async def reset_network_info(self) -> None:
+        await self._api._at_command("NR", 0)
+
     async def write_network_info(self, *, network_info, node_info):
         scan_bitmask = 1 << (network_info.channel - 11)
 
