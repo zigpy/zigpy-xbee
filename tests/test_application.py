@@ -217,12 +217,18 @@ async def test_broadcast(app):
     assert app._api._command.call_args[0][9] == data
 
     app._api._command.return_value = xbee_t.TXStatus.ADDRESS_NOT_FOUND
-    r = await app.broadcast(profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data)
-    assert r[0] != xbee_t.TXStatus.SUCCESS
+
+    with pytest.raises(zigpy.exceptions.DeliveryError):
+        r = await app.broadcast(
+            profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data
+        )
 
     app._api._command.side_effect = asyncio.TimeoutError
-    r = await app.broadcast(profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data)
-    assert r[0] != xbee_t.TXStatus.SUCCESS
+
+    with pytest.raises(zigpy.exceptions.DeliveryError):
+        r = await app.broadcast(
+            profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data
+        )
 
 
 async def test_get_association_state(app):
@@ -242,6 +248,14 @@ async def test_form_network(app):
     async def mock_at_command(cmd, *args):
         if cmd == "MY":
             return 0x0000
+        if cmd == "OI":
+            return 0x1234
+        elif cmd == "ID":
+            return 0x1234567812345678
+        elif cmd == "SL":
+            return 0x11223344
+        elif cmd == "SH":
+            return 0x55667788
         elif cmd == "WR":
             app._api.coordinator_started_event.set()
         elif cmd == "CE" and legacy_module:
@@ -393,24 +407,12 @@ async def test_permit(app):
 
 
 async def _test_request(
-    app,
-    expect_reply=True,
-    send_success=True,
-    send_timeout=False,
-    is_end_device=True,
-    node_desc=True,
-    **kwargs
+    app, expect_reply=True, send_success=True, send_timeout=False, **kwargs
 ):
     seq = 123
     nwk = 0x2345
     ieee = t.EUI64(b"\x01\x02\x03\x04\x05\x06\x07\x08")
     dev = app.add_device(ieee, nwk)
-
-    if node_desc:
-        dev.node_desc = mock.MagicMock()
-        dev.node_desc.is_end_device = is_end_device
-    else:
-        dev.node_desc = None
 
     def _mock_command(
         cmdname, ieee, nwk, src_ep, dst_ep, cluster, profile, radius, options, data
@@ -437,42 +439,34 @@ async def _test_request(
     )
 
 
+async def test_request_with_ieee(app):
+    r = await _test_request(app, use_ieee=True, send_success=True)
+    assert r[0] == 0
+
+
 async def test_request_with_reply(app):
     r = await _test_request(app, expect_reply=True, send_success=True)
     assert r[0] == 0
 
 
-async def test_request_without_node_desc(app):
-    r = await _test_request(app, expect_reply=True, send_success=True, node_desc=False)
-    assert r[0] == 0
-
-
 async def test_request_send_timeout(app):
-    r = await _test_request(app, send_timeout=True)
-    assert r[0] != 0
+    with pytest.raises(zigpy.exceptions.DeliveryError):
+        await _test_request(app, send_timeout=True)
 
 
 async def test_request_send_fail(app):
-    r = await _test_request(app, send_success=False)
-    assert r[0] != 0
+    with pytest.raises(zigpy.exceptions.DeliveryError):
+        await _test_request(app, send_success=False)
 
 
 async def test_request_extended_timeout(app):
-    is_end_device = False
-    r = await _test_request(app, True, True, is_end_device=is_end_device)
+    r = await _test_request(app, True, True, extended_timeout=False)
     assert r[0] == xbee_t.TXStatus.SUCCESS
     assert app._api._command.call_count == 1
     assert app._api._command.call_args[0][8] & 0x40 == 0x00
     app._api._command.reset_mock()
 
-    r = await _test_request(app, True, True, node_desc=False)
-    assert r[0] == xbee_t.TXStatus.SUCCESS
-    assert app._api._command.call_count == 1
-    assert app._api._command.call_args[0][8] & 0x40 == 0x40
-    app._api._command.reset_mock()
-
-    is_end_device = True
-    r = await _test_request(app, True, True, is_end_device=is_end_device)
+    r = await _test_request(app, True, True, extended_timeout=True)
     assert r[0] == xbee_t.TXStatus.SUCCESS
     assert app._api._command.call_count == 1
     assert app._api._command.call_args[0][8] & 0x40 == 0x40
@@ -570,10 +564,26 @@ async def test_mrequest_with_reply(app):
 
 
 async def test_mrequest_send_timeout(app):
-    r = await _test_mrequest(app, send_timeout=True)
-    assert r[0] != 0
+    with pytest.raises(zigpy.exceptions.DeliveryError):
+        await _test_mrequest(app, send_timeout=True)
 
 
 async def test_mrequest_send_fail(app):
-    r = await _test_mrequest(app, send_success=False)
-    assert r[0] != 0
+    with pytest.raises(zigpy.exceptions.DeliveryError):
+        await _test_mrequest(app, send_success=False)
+
+
+async def test_reset_network_info(app):
+    async def mock_at_command(cmd, *args):
+        if cmd == "NR":
+            return 0x00
+
+        return None
+
+    app._api._at_command = mock.MagicMock(
+        spec=XBee._at_command, side_effect=mock_at_command
+    )
+
+    await app.reset_network_info()
+
+    app._api._at_command.assert_called_once_with("NR", 0)
