@@ -182,6 +182,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     async def send_packet(self, packet: zigpy.types.ZigbeePacket) -> None:
         LOGGER.debug("Sending packet %r", packet)
 
+        try:
+            device = self.get_device_with_address(packet.dst)
+        except (KeyError, ValueError):
+            device = None
+
         tx_opts = TXOptions.NONE
 
         if packet.extended_timeout:
@@ -193,17 +198,25 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         long_addr = UNKNOWN_IEEE
         short_addr = UNKNOWN_NWK
 
-        if packet.dst.addr_mode == zigpy.types.AddrMode.IEEE:
-            long_addr = packet.dst.address
-        elif packet.dst.addr_mode == zigpy.types.AddrMode.Broadcast:
+        if packet.dst.addr_mode == zigpy.types.AddrMode.Broadcast:
             long_addr = EUI64(
                 [
                     zigpy.types.uint8_t(b)
                     for b in packet.dst.address.to_bytes(8, "little")
                 ]
             )
-        else:
             short_addr = packet.dst.address
+        elif packet.dst.addr_mode == zigpy.types.AddrMode.Group:
+            short_addr = packet.dst.address
+        elif packet.dst.addr_mode == zigpy.types.AddrMode.IEEE:
+            long_addr = EUI64(packet.dst.address)
+        elif device is not None:
+            long_addr = EUI64(device.ieee)
+            short_addr = device.nwk
+        else:
+            raise zigpy.exceptions.DeliveryError(
+                "Cannot send a packet to a device without a known IEEE address"
+            )
 
         send_req = self._api.tx_explicit(
             long_addr,
