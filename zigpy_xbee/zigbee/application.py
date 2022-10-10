@@ -221,8 +221,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         send_req = self._api.tx_explicit(
             long_addr,
             short_addr,
-            packet.src_ep,
-            packet.dst_ep,
+            packet.src_ep or 0,
+            packet.dst_ep or 0,
             packet.cluster_id,
             packet.profile_id,
             packet.radius,
