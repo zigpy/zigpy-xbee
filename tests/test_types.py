@@ -81,3 +81,30 @@ def test_nwk():
 
     assert str(nwk) == "0x1234"
     assert repr(nwk) == "0x1234"
+
+
+def test_iosample():
+    data = b"\x01\x55\x55\x85\x11\x11\x01\x55\x02\xAA\x0c\xe9"
+    sample_report, rest = t.IOSample.deserialize(data)
+
+    assert sample_report == {
+        "digital_samples": [
+            1,
+            None,
+            0,
+            None,
+            1,
+            None,
+            0,
+            None,
+            1,
+            None,
+            0,
+            None,
+            1,
+            None,
+            0,
+        ],
+        "analog_samples": [341, None, 682, None, None, None, None, 3305],
+    }
+    assert rest == b""
