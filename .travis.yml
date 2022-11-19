@@ -1,5 +1,8 @@
 language: python
-matrix:
+os: linux
+dist: focal
+cache: pip
+jobs:
   fast_finish: true
   include:
     - python: "3.7"
