@@ -325,7 +325,9 @@ class XBeeCoordinator(zigpy.quirks.CustomDevice):
         client_commands = {
             **Groups.client_commands,
             0x04: foundation.ZCLCommandDef(
-                "remove_all_response", {"status": foundation.Status}, is_reply=True
+                "remove_all_response",
+                {"status": foundation.Status},
+                direction=foundation.Direction.Client_to_Server,
             ),
         }
 
