@@ -161,6 +161,13 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         )
         LOGGER.debug("Association state: %s", association_state)
 
+    async def _move_network_to_channel(
+        self, new_channel: int, new_nwk_update_id: int
+    ) -> None:
+        """Moves the coordinator to a new channel."""
+        scan_bitmask = 1 << (new_channel - 11)
+        await self._api._queued_at("SC", scan_bitmask)
+
     async def force_remove(self, dev):
         """Forcibly remove device from NCP."""
         pass

@@ -587,3 +587,11 @@ async def test_reset_network_info(app):
     await app.reset_network_info()
 
     app._api._at_command.assert_called_once_with("NR", 0)
+
+
+async def test_move_network_to_channel(app):
+    app._api._queued_at = mock.AsyncMock(spec=XBee._at_command)
+    await app._move_network_to_channel(26, new_nwk_update_id=1)
+
+    assert len(app._api._queued_at.mock_calls) == 1
+    app._api._queued_at.assert_any_call("SC", 1 << (26 - 11))
