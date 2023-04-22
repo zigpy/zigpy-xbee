@@ -1,9 +1,10 @@
 import asyncio
 
 import pytest
-from zigpy import types as t
 import zigpy.exceptions
-from zigpy.zdo.types import ZDOCmd
+import zigpy.state
+import zigpy.types as t
+import zigpy.zdo.types as zdo_t
 
 from zigpy_xbee.api import ModemStatus, XBee
 import zigpy_xbee.config as config
@@ -19,6 +20,42 @@ APP_CONFIG = {
     },
     config.CONF_DATABASE: None,
 }
+
+
+@pytest.fixture
+def node_info():
+    return zigpy.state.NodeInfo(
+        nwk=t.NWK(0x0000),
+        ieee=t.EUI64.convert("00:12:4b:00:1c:a1:b8:46"),
+        logical_type=zdo_t.LogicalType.Coordinator,
+    )
+
+
+@pytest.fixture
+def network_info(node_info):
+    return zigpy.state.NetworkInfo(
+        extended_pan_id=t.ExtendedPanId.convert("bd:27:0b:38:37:95:dc:87"),
+        pan_id=t.PanId(0x9BB0),
+        nwk_update_id=18,
+        nwk_manager_id=t.NWK(0x0000),
+        channel=t.uint8_t(15),
+        channel_mask=t.Channels.ALL_CHANNELS,
+        security_level=t.uint8_t(5),
+        network_key=zigpy.state.Key(
+            key=t.KeyData.convert("2ccade06b3090c310315b3d574d3c85a"),
+            seq=108,
+            tx_counter=118785,
+        ),
+        tc_link_key=zigpy.state.Key(
+            key=t.KeyData(b"ZigBeeAlliance09"),
+            partner_ieee=node_info.ieee,
+            tx_counter=8712428,
+        ),
+        key_table=[],
+        children=[],
+        nwk_addresses={},
+        source="zigpy-xbee@0.0.0",
+    )
 
 
 @pytest.fixture
@@ -242,59 +279,22 @@ async def test_get_association_state(app):
     assert ai is mock.sentinel.ai
 
 
-async def test_form_network(app):
-    legacy_module = False
+async def test_write_network_info(app, node_info, network_info):
+    app._api._queued_at = mock.AsyncMock(spec=XBee._queued_at)
+    app._api._at_command = mock.AsyncMock(spec=XBee._at_command)
+    app._api._running = mock.AsyncMock(spec=app._api._running)
 
-    async def mock_at_command(cmd, *args):
-        if cmd == "MY":
-            return 0x0000
-        if cmd == "OI":
-            return 0x1234
-        elif cmd == "ID":
-            return 0x1234567812345678
-        elif cmd == "SL":
-            return 0x11223344
-        elif cmd == "SH":
-            return 0x55667788
-        elif cmd == "WR":
-            app._api.coordinator_started_event.set()
-        elif cmd == "CE" and legacy_module:
-            raise RuntimeError
-        return None
-
-    app._api._at_command = mock.MagicMock(
-        spec=XBee._at_command, side_effect=mock_at_command
-    )
-    app._api._queued_at = mock.MagicMock(
-        spec=XBee._at_command, side_effect=mock_at_command
-    )
     app._get_association_state = mock.AsyncMock(
         spec=application.ControllerApplication._get_association_state,
         return_value=0x00,
     )
 
-    app.write_network_info = mock.MagicMock(wraps=app.write_network_info)
-
-    await app.form_network()
-    assert app._api._at_command.call_count >= 1
-    assert app._api._queued_at.call_count >= 7
-
-    network_info = app.write_network_info.mock_calls[0][2]["network_info"]
+    await app.write_network_info(network_info=network_info, node_info=node_info)
 
     app._api._queued_at.assert_any_call("SC", 1 << (network_info.channel - 11))
     app._api._queued_at.assert_any_call("KY", b"ZigBeeAlliance09")
-
-    app._api._at_command.reset_mock()
-    app._api._queued_at.reset_mock()
-    legacy_module = True
-    await app.form_network()
-    assert app._api._at_command.call_count >= 1
-    assert app._api._queued_at.call_count >= 7
-
-    network_info = app.write_network_info.mock_calls[0][2]["network_info"]
-
-    app._api._queued_at.assert_any_call("SC", 1 << (network_info.channel - 11))
-    app._api._queued_at.assert_any_call("KY", b"ZigBeeAlliance09")
+    app._api._queued_at.assert_any_call("NK", network_info.network_key.key.serialize())
+    app._api._queued_at.assert_any_call("ID", 0xBD270B383795DC87)
 
 
 async def _test_start_network(
@@ -435,7 +435,7 @@ async def _test_request(
         seq,
         b"\xaa\x55\xbe\xef",
         expect_reply=expect_reply,
-        **kwargs
+        **kwargs,
     )
 
 
@@ -509,7 +509,7 @@ def nwk():
 
 def test_rx_device_annce(app, ieee, nwk):
     dst_ep = 0
-    cluster_id = ZDOCmd.Device_annce
+    cluster_id = zdo_t.ZDOCmd.Device_annce
     device = mock.MagicMock()
     device.status = device.Status.NEW
     app.get_device = mock.MagicMock(return_value=device)
