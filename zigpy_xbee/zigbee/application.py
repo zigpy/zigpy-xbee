@@ -10,6 +10,7 @@ import zigpy.config
 import zigpy.device
 import zigpy.exceptions
 import zigpy.quirks
+import zigpy.state
 import zigpy.types
 import zigpy.util
 from zigpy.zcl import foundation
@@ -69,13 +70,16 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         # Enable ZDO passthrough
         await self._api._at_command("AO", 0x03)
 
+        if self.state.node_info == zigpy.state.NodeInfo():
+            await self.load_network_info()
+
         enc_enabled = await self._api._at_command("EE")
         enc_options = await self._api._at_command("EO")
         zb_profile = await self._api._at_command("ZS")
 
         if (
             enc_enabled != 1
-            or enc_options != 2
+            or enc_options & 0b0010 != 0b0010
             or zb_profile != 2
             or association_state != 0
             or self.state.node_info.nwk != 0x0000
@@ -134,16 +138,18 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._api._at_command("NR", 0)
 
     async def write_network_info(self, *, network_info, node_info):
-        scan_bitmask = 1 << (network_info.channel - 11)
+        epid, _ = zigpy.types.uint64_t.deserialize(
+            network_info.extended_pan_id.serialize()
+        )
+        await self._api._queued_at("ID", epid)
 
         await self._api._queued_at("ZS", 2)
+        scan_bitmask = 1 << (network_info.channel - 11)
         await self._api._queued_at("SC", scan_bitmask)
         await self._api._queued_at("EE", 1)
-        await self._api._queued_at("EO", 2)
-
+        await self._api._queued_at("EO", 0b0010)
         await self._api._queued_at("NK", network_info.network_key.key.serialize())
         await self._api._queued_at("KY", network_info.tc_link_key.key.serialize())
-
         await self._api._queued_at("NJ", 0)
         await self._api._queued_at("SP", CONF_CYCLIC_SLEEP_PERIOD)
         await self._api._queued_at("SN", CONF_POLL_TIMEOUT)
@@ -160,6 +166,13 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self._get_association_state(), timeout=10
         )
         LOGGER.debug("Association state: %s", association_state)
+
+    async def _move_network_to_channel(
+        self, new_channel: int, new_nwk_update_id: int
+    ) -> None:
+        """Moves the coordinator to a new channel."""
+        scan_bitmask = 1 << (new_channel - 11)
+        await self._api._queued_at("SC", scan_bitmask)
 
     async def force_remove(self, dev):
         """Forcibly remove device from NCP."""
