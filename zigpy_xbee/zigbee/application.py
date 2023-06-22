@@ -263,7 +263,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 f"Failed to deliver packet: {v!r}", status=v
             )
 
-    @zigpy.util.retryable_request
+    @zigpy.util.retryable_request()
     def remote_at_command(
         self, nwk, cmd_name, *args, apply_changes=True, encryption=True
     ):
