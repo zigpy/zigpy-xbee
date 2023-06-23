@@ -174,6 +174,14 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         scan_bitmask = 1 << (new_channel - 11)
         await self._api._queued_at("SC", scan_bitmask)
 
+    async def energy_scan(
+        self, channels: zigpy.types.Channels, duration_exp: int, count: int
+    ) -> dict[int, float]:
+        """Runs an energy detection scan and returns the per-channel scan results."""
+
+        LOGGER.warning("Coordinator does not support energy scanning")
+        return {c: 0 for c in channels}
+
     async def force_remove(self, dev):
         """Forcibly remove device from NCP."""
         pass
@@ -255,7 +263,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 f"Failed to deliver packet: {v!r}", status=v
             )
 
-    @zigpy.util.retryable_request
+    @zigpy.util.retryable_request()
     def remote_at_command(
         self, nwk, cmd_name, *args, apply_changes=True, encryption=True
     ):

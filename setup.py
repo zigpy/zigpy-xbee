@@ -17,6 +17,6 @@ setup(
     author_email="rcloran@gmail.com",
     license="GPL-3.0",
     packages=find_packages(exclude=["tests", "tests.*"]),
-    install_requires=["zigpy>=0.51.0"],
+    install_requires=["zigpy>=0.56.0"],
     tests_require=["pytest", "asynctest", "pytest-asyncio"],
 )
