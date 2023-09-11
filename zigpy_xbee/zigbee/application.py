@@ -103,6 +103,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self.listener_event("raw_device_initialized", xbee_dev)
         self.devices[dev.ieee] = xbee_dev
 
+        await self.register_endpoints()
+
     async def load_network_info(self, *, load_devices=False):
         # Load node info
         node_info = self.state.node_info
@@ -186,10 +188,15 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         """Forcibly remove device from NCP."""
         pass
 
-    async def add_endpoint(self, descriptor):
+    async def add_endpoint(self, descriptor: zdo_t.SimpleDescriptor) -> None:
         """Register a new endpoint on the device."""
-        # This is not provided by the XBee API
-        pass
+        self._device.replacement["endpoints"][descriptor.endpoint] = {
+                "device_type": descriptor.device_type,
+                "profile_id": descriptor.profile,
+                "input_clusters": descriptor.input_clusters,
+                "output_clusters": descriptor.output_clusters,
+            }
+        self._device.add_endpoint(descriptor.endpoint)
 
     async def _get_association_state(self):
         """Wait for Zigbee to start."""
