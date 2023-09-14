@@ -347,6 +347,10 @@ class XBee:
         )
 
     def close(self):
+        if self._conn_lost_task:
+            self._conn_lost_task.cancel()
+            self._conn_lost_task = None
+
         if self._uart:
             self._uart.close()
             self._uart = None

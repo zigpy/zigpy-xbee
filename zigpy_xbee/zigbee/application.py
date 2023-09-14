@@ -49,6 +49,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         """Shutdown application."""
         if self._api:
             self._api.close()
+            self._api = None
 
     async def connect(self):
         self._api = await zigpy_xbee.api.XBee.new(self, self._config[CONF_DEVICE])
