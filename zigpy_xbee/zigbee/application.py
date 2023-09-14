@@ -192,11 +192,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     async def add_endpoint(self, descriptor: zdo_t.SimpleDescriptor) -> None:
         """Register a new endpoint on the device."""
         self._device.replacement["endpoints"][descriptor.endpoint] = {
-                "device_type": descriptor.device_type,
-                "profile_id": descriptor.profile,
-                "input_clusters": descriptor.input_clusters,
-                "output_clusters": descriptor.output_clusters,
-            }
+            "device_type": descriptor.device_type,
+            "profile_id": descriptor.profile,
+            "input_clusters": descriptor.input_clusters,
+            "output_clusters": descriptor.output_clusters,
+        }
         self._device.add_endpoint(descriptor.endpoint)
 
     async def _get_association_state(self):
