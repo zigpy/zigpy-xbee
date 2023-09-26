@@ -319,8 +319,14 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._api._at_command("NJ", time_s)
         await self._api._at_command("AC")
 
-    async def permit_with_key(self, node, code, time_s=60):
-        raise NotImplementedError("XBee does not support install codes")
+    async def permit_with_key(self, node: EUI64, code: bytes, time_s=500, key_type=1):
+        assert 0x1E <= time_s <= 0xFFFF
+        await self._api._at_command("KT", time_s)
+        reserved = 0xFFFE
+        # Key type:
+        # 0 = Pre-configured Link Key (KY command of the joining device)
+        # 1 = Install Code With CRC (I? command of the joining device)
+        await self._api.register_joining_device(node, reserved, key_type, code)
 
     def handle_modem_status(self, status):
         LOGGER.info("Modem status update: %s (%s)", status.name, status.value)
