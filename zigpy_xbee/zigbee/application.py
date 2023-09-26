@@ -182,8 +182,14 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     ) -> dict[int, float]:
         """Runs an energy detection scan and returns the per-channel scan results."""
 
-        LOGGER.warning("Coordinator does not support energy scanning")
-        return {c: 0 for c in channels}
+        if duration_exp:
+            energy = await self._api._at_command("ED", duration_exp)
+        else:
+            energy = await self._api._at_command("ED")
+
+        energy = {c: -int(e) for c, e in zip(range(11, 27), energy)}
+
+        return {c: energy.get(c, 0) for c in channels}
 
     async def force_remove(self, dev):
         """Forcibly remove device from NCP."""
