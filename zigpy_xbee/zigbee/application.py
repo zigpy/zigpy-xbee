@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
+import statistics
 import time
 from typing import Any
 
@@ -181,15 +183,41 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self, channels: zigpy.types.Channels, duration_exp: int, count: int
     ) -> dict[int, float]:
         """Runs an energy detection scan and returns the per-channel scan results."""
+        all_results = {}
 
-        if duration_exp:
-            energy = await self._api._at_command("ED", duration_exp)
-        else:
-            energy = await self._api._at_command("ED")
+        for _ in range(count):
+            if duration_exp:
+                results = await self._api._at_command("ED", duration_exp)
+            else:
+                results = await self._api._at_command("ED")
+            results = {
+                channel: -int(rssi) for channel, rssi in zip(range(11, 27), results)
+            }
 
-        energy = {c: -int(e) for c, e in zip(range(11, 27), energy)}
+            for channel, rssi in results.items():
+                all_results.setdefault(channel, []).append(rssi)
 
-        return {c: energy.get(c, 0) for c in channels}
+        def logistic(x: float, *, L: float = 1, x_0: float = 0, k: float = 1) -> float:
+            """Logistic function."""
+            return L / (1 + math.exp(-k * (x - x_0)))
+
+        def map_rssi_to_energy(rssi: int) -> float:
+            """Remaps RSSI (in dBm) to Energy (0-255)."""
+            RSSI_MAX = -5
+            RSSI_MIN = -92
+            return logistic(
+                x=rssi,
+                L=255,
+                x_0=RSSI_MIN + 0.45 * (RSSI_MAX - RSSI_MIN),
+                k=0.13,
+            )
+
+        energy = {
+            channel: map_rssi_to_energy(statistics.mean(all_rssi))
+            for channel, all_rssi in all_results.items()
+        }
+
+        return {channel: energy.get(channel, 0) for channel in channels}
 
     async def force_remove(self, dev):
         """Forcibly remove device from NCP."""
