@@ -49,6 +49,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         """Shutdown application."""
         if self._api:
             self._api.close()
+            self._api = None
 
     async def connect(self):
         self._api = await zigpy_xbee.api.XBee.new(self, self._config[CONF_DEVICE])
@@ -191,11 +192,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     async def add_endpoint(self, descriptor: zdo_t.SimpleDescriptor) -> None:
         """Register a new endpoint on the device."""
         self._device.replacement["endpoints"][descriptor.endpoint] = {
-                "device_type": descriptor.device_type,
-                "profile_id": descriptor.profile,
-                "input_clusters": descriptor.input_clusters,
-                "output_clusters": descriptor.output_clusters,
-            }
+            "device_type": descriptor.device_type,
+            "profile_id": descriptor.profile,
+            "input_clusters": descriptor.input_clusters,
+            "output_clusters": descriptor.output_clusters,
+        }
         self._device.add_endpoint(descriptor.endpoint)
 
     async def _get_association_state(self):
