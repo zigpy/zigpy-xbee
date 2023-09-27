@@ -15,7 +15,7 @@ from . import types as t, uart
 
 LOGGER = logging.getLogger(__name__)
 
-AT_COMMAND_TIMEOUT = 1
+AT_COMMAND_TIMEOUT = 3
 REMOTE_AT_COMMAND_TIMEOUT = 30
 PROBE_TIMEOUT = 45
 
@@ -347,6 +347,10 @@ class XBee:
         )
 
     def close(self):
+        if self._conn_lost_task:
+            self._conn_lost_task.cancel()
+            self._conn_lost_task = None
+
         if self._uart:
             self._uart.close()
             self._uart = None
