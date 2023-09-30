@@ -45,7 +45,7 @@ class Gateway(asyncio.Protocol):
             self._transport.serial.baudrate = baudrate
         else:
             raise ValueError(
-                "baudrate must be one of {}".format(self._transport.serial.BAUDRATES)
+                f"baudrate must be one of {self._transport.serial.BAUDRATES}"
             )
 
     def connection_lost(self, exc) -> None:

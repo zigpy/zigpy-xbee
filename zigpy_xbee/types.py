@@ -155,10 +155,10 @@ class FrameId(uint8_t):
 
 class NWK(uint16_t):
     def __repr__(self):
-        return "0x{:04x}".format(self)
+        return f"0x{self:04x}"
 
     def __str__(self):
-        return "0x{:04x}".format(self)
+        return f"0x{self:04x}"
 
 
 class Relays(zigpy.types.LVList, item_type=NWK, length_type=uint8_t):

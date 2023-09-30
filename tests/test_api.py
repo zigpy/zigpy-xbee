@@ -234,7 +234,7 @@ def test_frame_received(api, monkeypatch):
         cmd_id = cmd_opts[0]
         payload = b"\x01\x02\x03\x04"
         data = cmd_id.to_bytes(1, "big") + payload
-        setattr(api, "_handle_{}".format(cmd), my_handler)
+        setattr(api, f"_handle_{cmd}", my_handler)
         api.frame_received(data)
         assert t.deserialize.call_count == 1
         assert t.deserialize.call_args[0][0] == payload
@@ -268,7 +268,7 @@ def test_frame_received_no_handler(api, monkeypatch):
 
 
 def _handle_at_response(api, tsn, status, at_response=b""):
-    data = (tsn, "AI".encode("ascii"), status, at_response)
+    data = (tsn, b"AI", status, at_response)
     response = asyncio.Future()
     api._awaiting[tsn] = (response,)
     api._handle_at_response(*data)
