@@ -54,8 +54,7 @@ def test_command_mode_rsp(gw):
 def test_command_mode_send(gw):
     data = b"ATAP2\x0D"
     gw.command_mode_send(data)
-    assert gw._transport.write.call_count == 1
-    assert gw._transport.write.called_once_with(data)
+    gw._transport.write.assert_called_once_with(data)
 
 
 def test_close(gw):
@@ -160,9 +159,8 @@ def test_frame_received(gw):
 
 def test_send(gw):
     gw.send(b"\x23\x11")
-    assert gw._transport.write.call_count == 1
     data = b"\x7E\x00\x02\x23\x7D\x31\xCB"
-    assert gw._transport.write.called_once_with(data)
+    gw._transport.write.assert_called_once_with(data)
 
 
 def test_escape(gw):
