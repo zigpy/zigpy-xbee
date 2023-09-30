@@ -302,6 +302,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             LOGGER.info("handle_rx self addressed")
 
         ember_ieee = zigpy.types.EUI64(src_ieee)
+        # Interpret useful global ZDO responses and notifications
         if dst_ep == 0 and cluster_id == zdo_t.ZDOCmd.Device_annce:
             # ZDO Device announce request
             nwk, rest = zigpy.types.NWK.deserialize(data[1:])
@@ -320,6 +321,18 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                     src_nwk,
                 )
             self.handle_join(nwk, ieee, 0)
+        elif dst_ep == 0 and cluster_id in (
+            zdo_t.ZDOCmd.NWK_addr_rsp,
+            zdo_t.ZDOCmd.IEEE_addr_rsp,
+        ):
+            # ZDO IEEE Address Response or Network Address Response
+            status, rest = zdo_t.Status.deserialize(data[1:])
+            ieee, rest = zigpy.types.EUI64.deserialize(rest)
+            nwk, rest = zigpy.types.NWK.deserialize(rest)
+
+            if status == zdo_t.Status.SUCCESS:
+                LOGGER.debug("Discovered IEEE address for NWK=%s: %s", nwk, ieee)
+                self.handle_join(nwk, ieee, 0, handle_rejoin=False)
 
         try:
             self._device.last_seen = time.time()
