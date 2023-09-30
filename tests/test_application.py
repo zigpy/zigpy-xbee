@@ -478,9 +478,11 @@ async def test_force_remove(app):
 
 
 async def test_shutdown(app):
-    app._api.close = mock.MagicMock()
+    mack_close = mock.MagicMock()
+    app._api.close = mack_close
     await app.shutdown()
-    assert app._api.close.call_count == 1
+    assert app._api is None
+    assert mack_close.call_count == 1
 
 
 def test_remote_at_cmd(app, device):

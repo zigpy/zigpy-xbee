@@ -68,6 +68,7 @@ ENV/
 
 # Editor temp files
 .*.swp
+tags
 
 # Visual Studio Code
 .vscode
