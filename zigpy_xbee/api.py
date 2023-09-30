@@ -217,7 +217,6 @@ AT_COMMANDS = {
     "RE": None,
     "FR": None,
     "NR": t.Bool,
-    "SI": None,
     "CB": t.uint8_t,
     "ND": t,  # "optional 2-Byte NI value"
     "DN": t.Bytes,  # "up to 20-Byte printable ASCII string"
@@ -407,7 +406,7 @@ class XBee:
         LOGGER.debug("Frame received: %s", command)
         data, rest = t.deserialize(data[1:], COMMAND_RESPONSES[command][1])
         try:
-            getattr(self, "_handle_%s" % (command,))(*data)
+            getattr(self, f"_handle_{command}")(*data)
         except AttributeError:
             LOGGER.error("No '%s' handler. Data: %s", command, binascii.hexlify(data))
 
@@ -419,9 +418,7 @@ class XBee:
             status = ATCommandResult.ERROR
 
         if status:
-            fut.set_exception(
-                RuntimeError("AT Command response: {}".format(status.name))
-            )
+            fut.set_exception(RuntimeError(f"AT Command response: {status.name}"))
             return
 
         response_type = AT_COMMANDS[cmd.decode("ascii")]
@@ -496,7 +493,7 @@ class XBee:
             ):
                 fut.set_result(tx_status)
             else:
-                fut.set_exception(DeliveryError("%s" % (tx_status,)))
+                fut.set_exception(DeliveryError(f"{tx_status}"))
         except asyncio.InvalidStateError as ex:
             LOGGER.debug("duplicate tx_status for %s nwk? State: %s", nwk, ex)
 
@@ -544,7 +541,7 @@ class XBee:
             if not await self.command_mode_at_cmd(cmd + "\r"):
                 LOGGER.debug("No response to %s cmd", cmd)
                 return None
-            LOGGER.debug("Successfuly sent %s cmd", cmd)
+            LOGGER.debug("Successfully sent %s cmd", cmd)
         self._uart.reset_command_mode()
         return True
 
@@ -569,10 +566,8 @@ class XBee:
                 return res
 
         LOGGER.debug(
-            (
-                "Couldn't enter AT command mode at any known baudrate."
-                "Configure XBee manually for escaped API mode ATAP2"
-            )
+            "Couldn't enter AT command mode at any known baudrate."
+            "Configure XBee manually for escaped API mode ATAP2"
         )
         return False
 
@@ -609,4 +604,4 @@ class XBee:
     def __getattr__(self, item):
         if item in COMMAND_REQUESTS:
             return functools.partial(self._command, item)
-        raise AttributeError("Unknown command {}".format(item))
+        raise AttributeError(f"Unknown command {item}")

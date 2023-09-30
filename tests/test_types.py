@@ -36,7 +36,7 @@ def test_bytes_deserialize():
 
 
 def test_atcommand():
-    cmd = "AI".encode("ascii")
+    cmd = b"AI"
     data = 0x06.to_bytes(4, "big")
     r_cmd, r_data = t.ATCommand.deserialize(cmd + data)
 

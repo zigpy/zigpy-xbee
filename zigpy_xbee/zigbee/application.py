@@ -187,7 +187,6 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
     async def force_remove(self, dev):
         """Forcibly remove device from NCP."""
-        pass
 
     async def add_endpoint(self, descriptor: zdo_t.SimpleDescriptor) -> None:
         """Register a new endpoint on the device."""
