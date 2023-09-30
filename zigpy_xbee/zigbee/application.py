@@ -46,6 +46,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     def __init__(self, config: dict[str, Any]):
         super().__init__(config=zigpy.config.ZIGPY_SCHEMA(config))
         self._api: zigpy_xbee.api.XBee | None = None
+        self.topology.add_listener(self)
 
     async def disconnect(self):
         """Shutdown application."""
@@ -384,6 +385,44 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 return
 
         self.handle_message(device, profile_id, cluster_id, src_ep, dst_ep, data)
+
+    def neighbors_updated(
+        self, ieee: zigpy.types.EUI64, neighbors: list[zdo_t.Neighbor]
+    ) -> None:
+        """Neighbor update from Mgmt_Lqi_req."""
+        for neighbor in neighbors:
+            if neighbor.relationship == zdo_t._NeighborEnums.Relationship.Parent:
+                device = self.get_device(ieee=ieee)
+                device.radio_details(lqi=neighbor.lqi, rssi=device.rssi)
+
+            elif neighbor.relationship == zdo_t._NeighborEnums.Relationship.Child:
+                try:
+                    child_device = self.get_device(ieee=neighbor.ieee)
+                    child_device.radio_details(lqi=neighbor.lqi, rssi=child_device.rssi)
+                except KeyError:
+                    LOGGER.warning("Unknown device %r", neighbor.ieee)
+
+    def routes_updated(
+        self, ieee: zigpy.types.EUI64, routes: list[zdo_t.Route]
+    ) -> None:
+        """Route update from Mgmt_Rtg_req."""
+        self.create_task(
+            self._routes_updated(ieee, routes), f"routes_updated-ieee={ieee}"
+        )
+
+    async def _routes_updated(
+        self, ieee: zigpy.types.EUI64, routes: list[zdo_t.Route]
+    ) -> None:
+        for route in routes:
+            if (
+                route.DstNWK == self.state.node_info.nwk
+                and route.NextHop == self.state.node_info.nwk
+                and route.RouteStatus == zdo_t.RouteStatus.Active
+            ):
+                device = self.get_device(ieee=ieee)
+                rssi = await self._api._at_command("DB")
+                device.radio_details(lqi=device.lqi, rssi=-rssi)
+                break
 
 
 class XBeeCoordinator(zigpy.quirks.CustomDevice):
