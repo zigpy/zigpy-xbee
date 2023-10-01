@@ -600,20 +600,14 @@ async def test_move_network_to_channel(app):
 
 
 async def test_energy_scan(app):
-    async def mock_at_command(cmd, *args):
-        if cmd == "ED":
-            return b"\x0A\x0F\x14\x19\x1E\x23\x28\x2D\x32\x37\x3C\x41\x46\x4B\x50\x55"
-
-        return None
-
-    app._api._at_command = mock.MagicMock(
-        spec=XBee._at_command, side_effect=mock_at_command
-    )
-    time_s = 300
+    rssi = b"\x0A\x0F\x14\x19\x1E\x23\x28\x2D\x32\x37\x3C\x41\x46\x4B\x50\x55"
+    app._api._at_command = mock.AsyncMock(spec=XBee._at_command, return_value=rssi)
+    time_s = 3
     energy = await app.energy_scan(
         channels=[x for x in range(11, 27)], duration_exp=time_s, count=3
     )
     assert app._api._at_command.call_count == 3
+    assert app._api._at_command.call_args_list[0][0][0] == "ED"
     assert app._api._at_command.call_args_list[0][0][1] == time_s
     assert {k: round(v, 3) for k, v in energy.items()} == {
         11: 254.032,
