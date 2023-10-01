@@ -31,7 +31,13 @@ async def test_connect(monkeypatch):
 
 def test_close(api):
     uart = api._uart
+    conn_lost_task = mock.MagicMock()
+    api._conn_lost_task = conn_lost_task
+
     api.close()
+
+    assert api._conn_lost_task is None
+    assert conn_lost_task.cancel.call_count == 1
     assert api._uart is None
     assert uart.close.call_count == 1
 
@@ -564,7 +570,7 @@ async def test_reconnect_multiple_attempts(monkeypatch, caplog):
 
 
 @mock.patch.object(xbee_api.XBee, "_at_command", new_callable=mock.AsyncMock)
-@mock.patch.object(uart, "connect")
+@mock.patch.object(uart, "connect", return_value=mock.MagicMock())
 async def test_probe_success(mock_connect, mock_at_cmd):
     """Test device probing."""
 
@@ -579,7 +585,7 @@ async def test_probe_success(mock_connect, mock_at_cmd):
 
 @mock.patch.object(xbee_api.XBee, "init_api_mode", return_value=True)
 @mock.patch.object(xbee_api.XBee, "_at_command", side_effect=asyncio.TimeoutError)
-@mock.patch.object(uart, "connect")
+@mock.patch.object(uart, "connect", return_value=mock.MagicMock())
 async def test_probe_success_api_mode(mock_connect, mock_at_cmd, mock_api_mode):
     """Test device probing."""
 
@@ -595,7 +601,7 @@ async def test_probe_success_api_mode(mock_connect, mock_at_cmd, mock_api_mode):
 
 @mock.patch.object(xbee_api.XBee, "init_api_mode")
 @mock.patch.object(xbee_api.XBee, "_at_command", side_effect=asyncio.TimeoutError)
-@mock.patch.object(uart, "connect")
+@mock.patch.object(uart, "connect", return_value=mock.MagicMock())
 @pytest.mark.parametrize(
     "exception",
     (asyncio.TimeoutError, serial.SerialException, zigpy.exceptions.APIException),
@@ -619,7 +625,7 @@ async def test_probe_fail(mock_connect, mock_at_cmd, mock_api_mode, exception):
 
 @mock.patch.object(xbee_api.XBee, "init_api_mode", return_value=False)
 @mock.patch.object(xbee_api.XBee, "_at_command", side_effect=asyncio.TimeoutError)
-@mock.patch.object(uart, "connect")
+@mock.patch.object(uart, "connect", return_value=mock.MagicMock())
 async def test_probe_fail_api_mode(mock_connect, mock_at_cmd, mock_api_mode):
     """Test device probing fails."""
 
@@ -636,7 +642,7 @@ async def test_probe_fail_api_mode(mock_connect, mock_at_cmd, mock_api_mode):
     assert mock_connect.return_value.close.call_count == 1
 
 
-@mock.patch.object(xbee_api.XBee, "connect")
+@mock.patch.object(xbee_api.XBee, "connect", return_value=mock.MagicMock())
 async def test_xbee_new(conn_mck):
     """Test new class method."""
     api = await xbee_api.XBee.new(mock.sentinel.application, DEVICE_CONFIG)
