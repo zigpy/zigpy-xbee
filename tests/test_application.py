@@ -279,8 +279,16 @@ async def test_get_association_state(app):
     assert ai is mock.sentinel.ai
 
 
-async def test_write_network_info(app, node_info, network_info):
-    app._api._queued_at = mock.AsyncMock(spec=XBee._queued_at)
+@pytest.mark.parametrize("legacy_module", (False, True))
+async def test_write_network_info(app, node_info, network_info, legacy_module):
+    def _mock_queued_at(name, *args):
+        if legacy_module and name == "CE":
+            raise RuntimeError("Legacy module")
+        return "OK"
+
+    app._api._queued_at = mock.AsyncMock(
+        spec=XBee._queued_at, side_effect=_mock_queued_at
+    )
     app._api._at_command = mock.AsyncMock(spec=XBee._at_command)
     app._api._running = mock.AsyncMock(spec=app._api._running)
 
@@ -308,7 +316,7 @@ async def _test_start_network(
     legacy_module=False,
 ):
     ai_tries = 5
-    app.state.node_info.nwk = mock.sentinel.nwk
+    app.state.node_info = zigpy.state.NodeInfo()
 
     def _at_command_mock(cmd, *args):
         nonlocal ai_tries
@@ -348,7 +356,6 @@ async def _test_start_network(
         await app.connect()
 
     app.form_network = mock.AsyncMock()
-    await app.load_network_info()
     await app.start_network()
     return app
 
@@ -459,6 +466,25 @@ async def test_request_send_fail(app):
         await _test_request(app, send_success=False)
 
 
+async def test_request_unknown_device(app):
+    dev = zigpy.device.Device(
+        application=app, ieee=xbee_t.UNKNOWN_IEEE, nwk=xbee_t.UNKNOWN_NWK
+    )
+    with pytest.raises(
+        zigpy.exceptions.DeliveryError,
+        match="Cannot send a packet to a device without a known IEEE address",
+    ):
+        await app.request(
+            dev,
+            0x0260,
+            1,
+            2,
+            3,
+            123,
+            b"\xaa\x55\xbe\xef",
+        )
+
+
 async def test_request_extended_timeout(app):
     r = await _test_request(app, True, True, extended_timeout=False)
     assert r[0] == xbee_t.TXStatus.SUCCESS
@@ -485,12 +511,14 @@ async def test_shutdown(app):
     assert mack_close.call_count == 1
 
 
-def test_remote_at_cmd(app, device):
+async def test_remote_at_cmd(app, device):
     dev = device()
     app.get_device = mock.MagicMock(return_value=dev)
     app._api = mock.MagicMock(spec=XBee)
     s = mock.sentinel
-    app.remote_at_command(s.nwk, s.cmd, s.data, apply_changes=True, encryption=True)
+    await app.remote_at_command(
+        s.nwk, s.cmd, s.data, apply_changes=True, encryption=True
+    )
     assert app._api._remote_at_command.call_count == 1
     assert app._api._remote_at_command.call_args[0][0] is dev.ieee
     assert app._api._remote_at_command.call_args[0][1] == s.nwk
