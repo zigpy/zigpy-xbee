@@ -603,12 +603,11 @@ async def test_energy_scan(app):
     rssi = b"\x0A\x0F\x14\x19\x1E\x23\x28\x2D\x32\x37\x3C\x41\x46\x4B\x50\x55"
     app._api._at_command = mock.AsyncMock(spec=XBee._at_command, return_value=rssi)
     time_s = 3
+    count = 3
     energy = await app.energy_scan(
-        channels=[x for x in range(11, 27)], duration_exp=time_s, count=3
+        channels=[x for x in range(11, 27)], duration_exp=time_s, count=count
     )
-    assert app._api._at_command.call_count == 3
-    assert app._api._at_command.call_args_list[0][0][0] == "ED"
-    assert app._api._at_command.call_args_list[0][0][1] == time_s
+    assert app._api._at_command.mock_calls == [mock.call("ED", time_s)] * count
     assert {k: round(v, 3) for k, v in energy.items()} == {
         11: 254.032,
         12: 253.153,
