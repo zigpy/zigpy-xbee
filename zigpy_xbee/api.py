@@ -572,11 +572,9 @@ class XBee:
     def _handle_registration_status(self, frame_id, status):
         (fut,) = self._awaiting.pop(frame_id)
         if status:
-            fut.set_exception(
-                RuntimeError("Registration Status: {}".format(status.name))
-            )
+            fut.set_exception(RuntimeError(f"Registration Status: {status.name}"))
             return
-        LOGGER.debug("Registration Status: {}".format(status.name))
+        LOGGER.debug(f"Registration Status: {status.name}")
 
         fut.set_result(status)
 
