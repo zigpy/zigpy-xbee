@@ -89,6 +89,20 @@ class ModemStatus(t.uint8_t, t.UndefinedEnum):
     _UNDEFINED = 0xFF
 
 
+class RegistrationStatus(t.uint8_t, t.UndefinedEnum):
+    SUCCESS = 0x00
+    KEY_TOO_LONG = 0x01
+    TRANSIENT_KEY_TABLE_IS_FULL = 0x18
+    ADDRESS_NOT_FOUND_IN_THE_KEY_TABLE = 0xB1
+    KEY_IS_INVALID_OR_RESERVED = 0xB2
+    INVALID_ADDRESS = 0xB3
+    KEY_TABLE_IS_FULL = 0xB4
+    SECURITY_DATA_IS_INVALID_INSTALL_CODE_CRC_FAILS = 0xBD
+
+    UNKNOWN_MODEM_STATUS = 0xFF
+    _UNDEFINED = 0xFF
+
+
 # https://www.digi.com/resources/documentation/digidocs/PDFs/90000976.pdf
 COMMAND_REQUESTS = {
     "at": (0x08, (t.FrameId, t.ATCommand, t.Bytes), 0x88),
@@ -120,7 +134,11 @@ COMMAND_REQUESTS = {
         (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.Relays),
         None,
     ),
-    "register_joining_device": (0x24, (), None),
+    "register_joining_device": (
+        0x24,
+        (t.FrameId, t.EUI64, t.uint16_t, t.uint8_t, t.Bytes),
+        0xA4,
+    ),
 }
 COMMAND_RESPONSES = {
     "at_response": (0x88, (t.FrameId, t.ATCommand, t.uint8_t, t.Bytes), None),
@@ -155,6 +173,7 @@ COMMAND_RESPONSES = {
     "extended_status": (0x98, (), None),
     "route_record_indicator": (0xA1, (t.EUI64, t.NWK, t.uint8_t, t.Relays), None),
     "many_to_one_rri": (0xA3, (t.EUI64, t.NWK, t.uint8_t), None),
+    "registration_status": (0xA4, (t.FrameId, RegistrationStatus), None),
     "node_id_indicator": (0x95, (), None),
 }
 
@@ -201,6 +220,7 @@ AT_COMMANDS = {
     "EO": t.uint8_t,
     "NK": t.Bytes,  # 128-bit value
     "KY": t.Bytes,  # 128-bit value
+    "KT": t.uint16_t,  # 0x1E - 0xFFFF
     # RF interfacing commands
     "PL": t.uint8_t,  # 0 - 4 (basically an Enum)
     "PM": t.Bool,
@@ -548,6 +568,15 @@ class XBee:
                 fut.set_exception(DeliveryError(f"{tx_status}"))
         except asyncio.InvalidStateError as ex:
             LOGGER.debug("duplicate tx_status for %s nwk? State: %s", nwk, ex)
+
+    def _handle_registration_status(self, frame_id, status):
+        (fut,) = self._awaiting.pop(frame_id)
+        if status:
+            fut.set_exception(RuntimeError(f"Registration Status: {status.name}"))
+            return
+        LOGGER.debug(f"Registration Status: {status.name}")
+
+        fut.set_result(status)
 
     def set_application(self, app):
         self._app = app
