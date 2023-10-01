@@ -597,3 +597,32 @@ async def test_move_network_to_channel(app):
 
     assert len(app._api._queued_at.mock_calls) == 1
     app._api._queued_at.assert_any_call("SC", 1 << (26 - 11))
+
+
+async def test_energy_scan(app):
+    rssi = b"\x0A\x0F\x14\x19\x1E\x23\x28\x2D\x32\x37\x3C\x41\x46\x4B\x50\x55"
+    app._api._at_command = mock.AsyncMock(spec=XBee._at_command, return_value=rssi)
+    time_s = 3
+    count = 3
+    energy = await app.energy_scan(
+        channels=[x for x in range(11, 27)], duration_exp=time_s, count=count
+    )
+    assert app._api._at_command.mock_calls == [mock.call("ED", time_s)] * count
+    assert {k: round(v, 3) for k, v in energy.items()} == {
+        11: 254.032,
+        12: 253.153,
+        13: 251.486,
+        14: 248.352,
+        15: 242.562,
+        16: 232.193,
+        17: 214.619,
+        18: 187.443,
+        19: 150.853,
+        20: 109.797,
+        21: 72.172,
+        22: 43.571,
+        23: 24.769,
+        24: 13.56,
+        25: 7.264,
+        26: 3.844,
+    }

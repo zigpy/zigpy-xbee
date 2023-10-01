@@ -216,6 +216,8 @@ AT_COMMANDS = {
     "D7": t.uint8_t,  # 0 - 7 (an Enum)
     "P3": t.uint8_t,  # 0 - 5 (an Enum)
     "P4": t.uint8_t,  # 0 - 5 (an Enum)
+    # MAC diagnostics commands
+    "ED": t.Bytes,  # 16-byte value
     # I/O commands
     "IR": t.uint16_t,
     "IC": t.uint16_t,
