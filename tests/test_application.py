@@ -417,12 +417,25 @@ async def test_permit_with_key(app):
     app._api._command = mock.AsyncMock(return_value=xbee_t.TXStatus.SUCCESS)
     app._api._at_command = mock.AsyncMock(return_value="OK")
     node = t.EUI64(b"\x01\x02\x03\x04\x05\x06\x07\x08")
-    code = "C9A7D2441A711695CD62170D3328EA2B423D"
+    code = b"\xC9\xA7\xD2\x44\x1A\x71\x16\x95\xCD\x62\x17\x0D\x33\x28\xEA\x2B\x42\x3D"
     time_s = 500
     await app.permit_with_key(node=node, code=code, time_s=time_s)
     app._api._at_command.assert_called_once_with("KT", time_s)
     app._api._command.assert_called_once_with(
         "register_joining_device", node, 0xFFFE, 1, code
+    )
+
+
+async def test_permit_with_link_key(app):
+    app._api._command = mock.AsyncMock(return_value=xbee_t.TXStatus.SUCCESS)
+    app._api._at_command = mock.AsyncMock(return_value="OK")
+    node = t.EUI64(b"\x01\x02\x03\x04\x05\x06\x07\x08")
+    link_key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F"
+    time_s = 500
+    await app.permit_with_link_key(node=node, link_key=link_key, time_s=time_s)
+    app._api._at_command.assert_called_once_with("KT", time_s)
+    app._api._command.assert_called_once_with(
+        "register_joining_device", node, 0xFFFE, 0, link_key
     )
 
 

@@ -416,6 +416,26 @@ def test_handle_tx_status_duplicate(api):
     assert send_fut.set_exception.call_count == 0
 
 
+def test_handle_registration_status(api):
+    frame_id = 0x12
+    status = xbee_api.RegistrationStatus.SUCCESS
+    fut = asyncio.Future()
+    api._awaiting[frame_id] = (fut,)
+    api._handle_registration_status(frame_id, status)
+    assert fut.done() is True
+    assert fut.result() == xbee_api.RegistrationStatus.SUCCESS
+    assert fut.exception() is None
+
+    frame_id = 0x13
+    status = xbee_api.RegistrationStatus.KEY_TABLE_IS_FULL
+    fut = asyncio.Future()
+    api._awaiting[frame_id] = (fut,)
+    api._handle_registration_status(frame_id, status)
+    assert fut.done() is True
+    with pytest.raises(RuntimeError, match="Registration Status: KEY_TABLE_IS_FULL"):
+        fut.result()
+
+
 async def test_command_mode_at_cmd(api):
     command = "+++"
 
