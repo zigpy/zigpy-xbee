@@ -413,6 +413,19 @@ async def test_permit(app):
     assert app._api._at_command.call_args_list[0][0][1] == time_s
 
 
+async def test_permit_with_key(app):
+    app._api._command = mock.AsyncMock(return_value=xbee_t.TXStatus.SUCCESS)
+    app._api._at_command = mock.AsyncMock(return_value="OK")
+    node = t.EUI64(b"\x01\x02\x03\x04\x05\x06\x07\x08")
+    code = "C9A7D2441A711695CD62170D3328EA2B423D"
+    time_s = 500
+    await app.permit_with_key(node=node, code=code, time_s=time_s)
+    app._api._at_command.assert_called_once_with("KT", time_s)
+    app._api._command.assert_called_once_with(
+        "register_joining_device", node, 0xFFFE, 1, code
+    )
+
+
 async def _test_request(
     app, expect_reply=True, send_success=True, send_timeout=False, **kwargs
 ):
