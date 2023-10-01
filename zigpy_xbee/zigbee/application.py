@@ -186,10 +186,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         all_results = {}
 
         for _ in range(count):
-            if duration_exp:
-                results = await self._api._at_command("ED", duration_exp)
-            else:
-                results = await self._api._at_command("ED")
+            results = await self._api._at_command("ED", duration_exp)
             results = {
                 channel: -int(rssi) for channel, rssi in zip(range(11, 27), results)
             }
