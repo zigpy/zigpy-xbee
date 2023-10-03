@@ -4,7 +4,6 @@ import asyncio
 import logging
 import math
 import statistics
-import time
 from typing import Any
 
 import zigpy.application
@@ -341,49 +340,34 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     def handle_rx(
         self, src_ieee, src_nwk, src_ep, dst_ep, cluster_id, profile_id, rxopts, data
     ):
-        if src_nwk == 0:
+        src = zigpy.types.AddrModeAddress(
+            addr_mode=zigpy.types.AddrMode.NWK, address=src_nwk
+        )
+
+        dst = zigpy.types.AddrModeAddress(
+            addr_mode=zigpy.types.AddrMode.NWK, address=self.state.node_info.nwk
+        )
+
+        if src == dst:
             LOGGER.info("handle_rx self addressed")
 
-        ember_ieee = zigpy.types.EUI64(src_ieee)
-        if dst_ep == 0 and cluster_id == zdo_t.ZDOCmd.Device_annce:
-            # ZDO Device announce request
-            nwk, rest = zigpy.types.NWK.deserialize(data[1:])
-            ieee, rest = zigpy.types.EUI64.deserialize(rest)
-            LOGGER.info("New device joined: NWK 0x%04x, IEEE %s", nwk, ieee)
-            if ember_ieee != ieee:
-                LOGGER.warning(
-                    "Announced IEEE %s is different from originator %s",
-                    str(ieee),
-                    str(ember_ieee),
-                )
-            if src_nwk != nwk:
-                LOGGER.warning(
-                    "Announced 0x%04x NWK is different from originator 0x%04x",
-                    nwk,
-                    src_nwk,
-                )
-            self.handle_join(nwk, ieee, 0)
-
         try:
-            self._device.last_seen = time.time()
+            self._device.update_last_seen()
         except KeyError:
             pass
 
-        try:
-            device = self.get_device(nwk=src_nwk)
-        except KeyError:
-            if ember_ieee != UNKNOWN_IEEE and ember_ieee in self.devices:
-                self.handle_join(src_nwk, ember_ieee, 0)
-                device = self.get_device(ieee=ember_ieee)
-            else:
-                LOGGER.debug(
-                    "Received frame from unknown device: 0x%04x/%s",
-                    src_nwk,
-                    str(ember_ieee),
-                )
-                return
-
-        self.handle_message(device, profile_id, cluster_id, src_ep, dst_ep, data)
+        self.packet_received(
+            zigpy.types.ZigbeePacket(
+                src=src,
+                src_ep=src_ep,
+                dst=dst,
+                dst_ep=dst_ep,
+                tsn=None,
+                profile_id=profile_id,
+                cluster_id=cluster_id,
+                data=zigpy.types.SerializableBytes(data),
+            )
+        )
 
 
 class XBeeCoordinator(zigpy.quirks.CustomDevice):

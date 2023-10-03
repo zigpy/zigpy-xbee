@@ -4,6 +4,7 @@ import pytest
 import zigpy.exceptions
 import zigpy.state
 import zigpy.types as t
+import zigpy.zdo
 import zigpy.zdo.types as zdo_t
 
 from zigpy_xbee.api import ModemStatus, XBee
@@ -105,17 +106,15 @@ def _test_rx(
 def test_rx(app):
     device = mock.MagicMock()
     app.handle_message = mock.MagicMock()
-    _test_rx(app, device, mock.sentinel.src_nwk, data=mock.sentinel.message)
-    assert app.handle_message.call_count == 1
-    assert app.handle_message.call_args == (
-        (
-            device,
-            mock.sentinel.profile_id,
-            mock.sentinel.cluster_id,
-            mock.sentinel.src_ep,
-            mock.sentinel.dst_ep,
-            mock.sentinel.message,
-        ),
+    _test_rx(app, device, 0x1234, data=b"\x01\x02\x03\x04")
+    app.handle_message.assert_called_once_with(
+        sender=device,
+        profile=mock.sentinel.profile_id,
+        cluster=mock.sentinel.cluster_id,
+        src_ep=mock.sentinel.src_ep,
+        dst_ep=mock.sentinel.dst_ep,
+        message=b"\x01\x02\x03\x04",
+        dst_addressing=t.AddrMode.NWK,
     )
 
 
@@ -140,7 +139,8 @@ def test_rx_nwk_0000(app):
 def test_rx_unknown_device(app, device):
     """Unknown NWK, but existing device."""
     app.handle_message = mock.MagicMock()
-    app.handle_join = mock.MagicMock()
+    app.create_task = mock.MagicMock()
+    app._discover_unknown_device = mock.MagicMock()
     dev = device(nwk=0x1234)
     app.devices[dev.ieee] = dev
 
@@ -155,15 +155,17 @@ def test_rx_unknown_device(app, device):
         mock.sentinel.rxopts,
         b"",
     )
-    assert app.handle_join.call_count == 1
-    assert app.handle_message.call_count == 1
+    assert app.create_task.call_count == 1
+    app._discover_unknown_device.assert_called_once_with(0x3334)
+    assert app.handle_message.call_count == 0
     assert len(app.devices) == num_before_rx
 
 
 def test_rx_unknown_device_ieee(app):
     """Unknown NWK, and unknown IEEE."""
     app.handle_message = mock.MagicMock()
-    app.handle_join = mock.MagicMock()
+    app.create_task = mock.MagicMock()
+    app._discover_unknown_device = mock.MagicMock()
     app.get_device = mock.MagicMock(side_effect=KeyError)
     app.handle_rx(
         b"\xff\xff\xff\xff\xff\xff\xff\xff",
@@ -175,7 +177,8 @@ def test_rx_unknown_device_ieee(app):
         mock.sentinel.rxopts,
         b"",
     )
-    assert app.handle_join.call_count == 0
+    assert app.create_task.call_count == 1
+    app._discover_unknown_device.assert_called_once_with(0x3334)
     assert app.get_device.call_count == 2
     assert app.handle_message.call_count == 0
 
@@ -201,6 +204,8 @@ def device(app):
 def _device_join(app, dev, data):
     app.handle_message = mock.MagicMock()
     app.handle_join = mock.MagicMock()
+    app.create_task = mock.MagicMock()
+    app._discover_unknown_device = mock.MagicMock()
 
     dst_ep = 0
     cluster_id = 0x0013
@@ -212,21 +217,21 @@ def _device_join(app, dev, data):
 
 def test_device_join_new(app, device):
     dev = device()
-    data = b"\xee" + dev.nwk.serialize() + dev.ieee.serialize()
+    data = b"\xee" + dev.nwk.serialize() + dev.ieee.serialize() + b"\x40"
 
     _device_join(app, dev, data)
 
 
 def test_device_join_inconsistent_nwk(app, device):
     dev = device()
-    data = b"\xee" + b"\x01\x02" + dev.ieee.serialize()
+    data = b"\xee" + b"\x01\x02" + dev.ieee.serialize() + b"\x40"
 
     _device_join(app, dev, data)
 
 
 def test_device_join_inconsistent_ieee(app, device):
     dev = device()
-    data = b"\xee" + dev.nwk.serialize() + b"\x01\x02\x03\x04\x05\x06\x07\x08"
+    data = b"\xee" + dev.nwk.serialize() + b"\x01\x02\x03\x04\x05\x06\x07\x08" + b"\x40"
 
     _device_join(app, dev, data)
 
@@ -568,6 +573,7 @@ def test_rx_device_annce(app, ieee, nwk):
     cluster_id = zdo_t.ZDOCmd.Device_annce
     device = mock.MagicMock()
     device.status = device.Status.NEW
+    device.zdo = zigpy.zdo.ZDO(None)
     app.get_device = mock.MagicMock(return_value=device)
     app.handle_join = mock.MagicMock()
     app.handle_message = mock.MagicMock()
@@ -589,10 +595,7 @@ def test_rx_device_annce(app, ieee, nwk):
     )
 
     assert app.handle_message.call_count == 1
-    assert app.handle_join.call_count == 1
-    assert app.handle_join.call_args[0][0] == nwk
-    assert app.handle_join.call_args[0][1] == ieee
-    assert app.handle_join.call_args[0][2] == 0
+    app.handle_join.assert_called_once_with(nwk=nwk, ieee=ieee, parent_nwk=None)
 
 
 async def _test_mrequest(app, send_success=True, send_timeout=False, **kwargs):
