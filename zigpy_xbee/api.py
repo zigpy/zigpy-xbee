@@ -292,7 +292,7 @@ AT_COMMANDS = {
     "CB": t.uint8_t,
     "ND": t,  # "optional 2-Byte NI value"
     "DN": t.Bytes,  # "up to 20-Byte printable ASCII string"
-    "IS": None,
+    "IS": t.IOSample,
     "1S": None,
     "AS": None,
     # Stuff I've guessed
