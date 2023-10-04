@@ -4,8 +4,9 @@ import logging
 import pytest
 import serial
 import zigpy.exceptions
+import zigpy.types as t
 
-from zigpy_xbee import api as xbee_api, types as t, uart
+from zigpy_xbee import api as xbee_api, types as xbee_t, uart
 import zigpy_xbee.config
 from zigpy_xbee.zigbee.application import ControllerApplication
 
@@ -335,19 +336,19 @@ def _send_modem_event(api, event):
 def test_handle_modem_status(api):
     api._running.clear()
     api._reset.set()
-    _send_modem_event(api, xbee_api.ModemStatus.COORDINATOR_STARTED)
+    _send_modem_event(api, xbee_t.ModemStatus.COORDINATOR_STARTED)
     assert api.is_running is True
     assert api.reset_event.is_set() is True
 
     api._running.set()
     api._reset.set()
-    _send_modem_event(api, xbee_api.ModemStatus.DISASSOCIATED)
+    _send_modem_event(api, xbee_t.ModemStatus.DISASSOCIATED)
     assert api.is_running is False
     assert api.reset_event.is_set() is True
 
     api._running.set()
     api._reset.clear()
-    _send_modem_event(api, xbee_api.ModemStatus.HARDWARE_RESET)
+    _send_modem_event(api, xbee_t.ModemStatus.HARDWARE_RESET)
     assert api.is_running is False
     assert api.reset_event.is_set() is True
 
@@ -371,26 +372,28 @@ def test_handle_explicit_rx_indicator(api):
 
 
 def _handle_tx_status(api, status, wrong_frame_id=False):
-    status = t.TXStatus(status)
+    status = xbee_t.TXStatus(status)
     frame_id = 0x12
     send_fut = mock.MagicMock(spec=asyncio.Future)
     api._awaiting[frame_id] = (send_fut,)
     s = mock.sentinel
     if wrong_frame_id:
         frame_id += 1
-    api._handle_tx_status(frame_id, s.dst_nwk, s.retries, status, t.DiscoveryStatus())
+    api._handle_tx_status(
+        frame_id, s.dst_nwk, s.retries, status, xbee_t.DiscoveryStatus()
+    )
     return send_fut
 
 
 def test_handle_tx_status_success(api):
-    fut = _handle_tx_status(api, t.TXStatus.SUCCESS)
+    fut = _handle_tx_status(api, xbee_t.TXStatus.SUCCESS)
     assert len(api._awaiting) == 0
     assert fut.set_result.call_count == 1
     assert fut.set_exception.call_count == 0
 
 
 def test_handle_tx_status_except(api):
-    fut = _handle_tx_status(api, t.TXStatus.ADDRESS_NOT_FOUND)
+    fut = _handle_tx_status(api, xbee_t.TXStatus.ADDRESS_NOT_FOUND)
     assert len(api._awaiting) == 0
     assert fut.set_result.call_count == 0
     assert fut.set_exception.call_count == 1
@@ -404,7 +407,7 @@ def test_handle_tx_status_unexpected(api):
 
 
 def test_handle_tx_status_duplicate(api):
-    status = t.TXStatus.SUCCESS
+    status = xbee_t.TXStatus.SUCCESS
     frame_id = 0x12
     send_fut = mock.MagicMock(spec=asyncio.Future)
     send_fut.set_result.side_effect = asyncio.InvalidStateError
@@ -418,16 +421,16 @@ def test_handle_tx_status_duplicate(api):
 
 def test_handle_registration_status(api):
     frame_id = 0x12
-    status = xbee_api.RegistrationStatus.SUCCESS
+    status = xbee_t.RegistrationStatus.SUCCESS
     fut = asyncio.Future()
     api._awaiting[frame_id] = (fut,)
     api._handle_registration_status(frame_id, status)
     assert fut.done() is True
-    assert fut.result() == xbee_api.RegistrationStatus.SUCCESS
+    assert fut.result() == xbee_t.RegistrationStatus.SUCCESS
     assert fut.exception() is None
 
     frame_id = 0x13
-    status = xbee_api.RegistrationStatus.KEY_TABLE_IS_FULL
+    status = xbee_t.RegistrationStatus.KEY_TABLE_IS_FULL
     fut = asyncio.Future()
     api._awaiting[frame_id] = (fut,)
     api._handle_registration_status(frame_id, status)
