@@ -1,3 +1,5 @@
+"""Tests for API."""
+
 import asyncio
 import logging
 
@@ -19,18 +21,21 @@ DEVICE_CONFIG = zigpy_xbee.config.SCHEMA_DEVICE(
 
 @pytest.fixture
 def api():
+    """Sample XBee API fixture."""
     api = xbee_api.XBee(DEVICE_CONFIG)
     api._uart = mock.MagicMock()
     return api
 
 
 async def test_connect(monkeypatch):
+    """Test connect."""
     api = xbee_api.XBee(DEVICE_CONFIG)
     monkeypatch.setattr(uart, "connect", mock.AsyncMock())
     await api.connect()
 
 
 def test_close(api):
+    """Test connection close."""
     uart = api._uart
     conn_lost_task = mock.MagicMock()
     api._conn_lost_task = conn_lost_task
@@ -44,6 +49,7 @@ def test_close(api):
 
 
 def test_commands():
+    """Test command requests and command responses description."""
     import string
 
     anum = string.ascii_letters + string.digits + "_"
@@ -60,6 +66,8 @@ def test_commands():
 
 
 async def test_command(api):
+    """Test AT commands."""
+
     def mock_api_frame(name, *args):
         c = xbee_api.COMMAND_REQUESTS[name]
         return mock.sentinel.api_frame_data, c[2]
@@ -97,6 +105,7 @@ async def test_command(api):
 
 
 async def test_command_not_connected(api):
+    """Test AT command while disconnected to the device."""
     api._uart = None
 
     def mock_api_frame(name, *args):
@@ -115,6 +124,7 @@ async def _test_at_or_queued_at_command(api, cmd, monkeypatch, do_reply=True):
     monkeypatch.setattr(
         t, "serialize", mock.MagicMock(return_value=mock.sentinel.serialize)
     )
+    """Call api._at_command() or api._queued_at() with every possible command."""
 
     def mock_command(name, *args):
         rsp = xbee_api.COMMAND_REQUESTS[name][2]
@@ -141,10 +151,12 @@ async def _test_at_or_queued_at_command(api, cmd, monkeypatch, do_reply=True):
 
 
 async def test_at_command(api, monkeypatch):
+    """Test api._at_command."""
     await _test_at_or_queued_at_command(api, api._at_command, monkeypatch)
 
 
 async def test_at_command_no_response(api, monkeypatch):
+    """Test api._at_command with no response."""
     with pytest.raises(asyncio.TimeoutError):
         await _test_at_or_queued_at_command(
             api, api._at_command, monkeypatch, do_reply=False
@@ -152,6 +164,7 @@ async def test_at_command_no_response(api, monkeypatch):
 
 
 async def test_queued_at_command(api, monkeypatch):
+    """Test api._queued_at."""
     await _test_at_or_queued_at_command(api, api._queued_at, monkeypatch)
 
 
@@ -159,6 +172,7 @@ async def _test_remote_at_command(api, monkeypatch, do_reply=True):
     monkeypatch.setattr(
         t, "serialize", mock.MagicMock(return_value=mock.sentinel.serialize)
     )
+    """Call api._remote_at_command()."""
 
     def mock_command(name, *args):
         rsp = xbee_api.COMMAND_REQUESTS[name][2]
@@ -194,16 +208,19 @@ async def _test_remote_at_command(api, monkeypatch, do_reply=True):
 
 
 async def test_remote_at_cmd(api, monkeypatch):
+    """Test remote AT command."""
     await _test_remote_at_command(api, monkeypatch)
 
 
 async def test_remote_at_cmd_no_rsp(api, monkeypatch):
+    """Test remote AT command with no response."""
     monkeypatch.setattr(xbee_api, "REMOTE_AT_COMMAND_TIMEOUT", 0.1)
     with pytest.raises(asyncio.TimeoutError):
         await _test_remote_at_command(api, monkeypatch, do_reply=False)
 
 
 def test_api_frame(api):
+    """Test api._api_frame."""
     ieee = t.EUI64([t.uint8_t(a) for a in range(0, 8)])
     for cmd_name, cmd_opts in xbee_api.COMMAND_REQUESTS.items():
         cmd_id, schema, repl = cmd_opts
@@ -215,6 +232,7 @@ def test_api_frame(api):
 
 
 def test_frame_received(api, monkeypatch):
+    """Test api.frame_received()."""
     monkeypatch.setattr(
         t,
         "deserialize",
@@ -255,6 +273,7 @@ def test_frame_received(api, monkeypatch):
 
 
 def test_frame_received_no_handler(api, monkeypatch):
+    """Test frame received with no handler defined."""
     monkeypatch.setattr(
         t, "deserialize", mock.MagicMock(return_value=(b"deserialized data", b""))
     )
@@ -275,6 +294,7 @@ def test_frame_received_no_handler(api, monkeypatch):
 
 
 def _handle_at_response(api, tsn, status, at_response=b""):
+    """Call api._handle_at_response."""
     data = (tsn, b"AI", status, at_response)
     response = asyncio.Future()
     api._awaiting[tsn] = (response,)
@@ -283,6 +303,7 @@ def _handle_at_response(api, tsn, status, at_response=b""):
 
 
 def test_handle_at_response_none(api):
+    """Test AT successful response with no value."""
     tsn = 123
     fut = _handle_at_response(api, tsn, 0)
     assert fut.done() is True
@@ -291,6 +312,7 @@ def test_handle_at_response_none(api):
 
 
 def test_handle_at_response_data(api):
+    """Test AT successful response with data."""
     tsn = 123
     status, response = 0, 0x23
     fut = _handle_at_response(api, tsn, status, [response])
@@ -300,6 +322,7 @@ def test_handle_at_response_data(api):
 
 
 def test_handle_at_response_error(api):
+    """Test AT unsuccessful response."""
     tsn = 123
     status, response = 1, 0x23
     fut = _handle_at_response(api, tsn, status, [response])
@@ -308,6 +331,7 @@ def test_handle_at_response_error(api):
 
 
 def test_handle_at_response_undef_error(api):
+    """Test AT unsuccessful response with undefined error."""
     tsn = 123
     status, response = 0xEE, 0x23
     fut = _handle_at_response(api, tsn, status, [response])
@@ -316,6 +340,7 @@ def test_handle_at_response_undef_error(api):
 
 
 def test_handle_remote_at_rsp(api):
+    """Test handling the response."""
     api._handle_at_response = mock.MagicMock()
     s = mock.sentinel
     api._handle_remote_at_response(s.frame_id, s.ieee, s.nwk, s.cmd, s.status, s.data)
@@ -327,6 +352,7 @@ def test_handle_remote_at_rsp(api):
 
 
 def _send_modem_event(api, event):
+    """Call api._handle_modem_status()."""
     api._app = mock.MagicMock(spec=ControllerApplication)
     api._handle_modem_status(event)
     assert api._app.handle_modem_status.call_count == 1
@@ -334,6 +360,7 @@ def _send_modem_event(api, event):
 
 
 def test_handle_modem_status(api):
+    """Test api._handle_modem_status()."""
     api._running.clear()
     api._reset.set()
     _send_modem_event(api, xbee_t.ModemStatus.COORDINATOR_STARTED)
@@ -354,6 +381,7 @@ def test_handle_modem_status(api):
 
 
 def test_handle_explicit_rx_indicator(api):
+    """Test receiving explicit_rx_indicator frame."""
     s = mock.sentinel
     data = [
         s.src_ieee,
@@ -372,6 +400,7 @@ def test_handle_explicit_rx_indicator(api):
 
 
 def _handle_tx_status(api, status, wrong_frame_id=False):
+    """Call api._handle_tx_status."""
     status = xbee_t.TXStatus(status)
     frame_id = 0x12
     send_fut = mock.MagicMock(spec=asyncio.Future)
@@ -386,6 +415,7 @@ def _handle_tx_status(api, status, wrong_frame_id=False):
 
 
 def test_handle_tx_status_success(api):
+    """Test handling successful TX Status."""
     fut = _handle_tx_status(api, xbee_t.TXStatus.SUCCESS)
     assert len(api._awaiting) == 0
     assert fut.set_result.call_count == 1
@@ -393,6 +423,7 @@ def test_handle_tx_status_success(api):
 
 
 def test_handle_tx_status_except(api):
+    """Test exceptional TXStatus."""
     fut = _handle_tx_status(api, xbee_t.TXStatus.ADDRESS_NOT_FOUND)
     assert len(api._awaiting) == 0
     assert fut.set_result.call_count == 0
@@ -400,6 +431,7 @@ def test_handle_tx_status_except(api):
 
 
 def test_handle_tx_status_unexpected(api):
+    """Test TX status reply on unexpected frame."""
     fut = _handle_tx_status(api, 1, wrong_frame_id=True)
     assert len(api._awaiting) == 1
     assert fut.set_result.call_count == 0
@@ -407,6 +439,7 @@ def test_handle_tx_status_unexpected(api):
 
 
 def test_handle_tx_status_duplicate(api):
+    """Test TX status duplicate reply."""
     status = xbee_t.TXStatus.SUCCESS
     frame_id = 0x12
     send_fut = mock.MagicMock(spec=asyncio.Future)
@@ -420,6 +453,7 @@ def test_handle_tx_status_duplicate(api):
 
 
 def test_handle_registration_status(api):
+    """Test receiving network registration status."""
     frame_id = 0x12
     status = xbee_t.RegistrationStatus.SUCCESS
     fut = asyncio.Future()
@@ -440,6 +474,7 @@ def test_handle_registration_status(api):
 
 
 async def test_command_mode_at_cmd(api):
+    """Test AT in command mode."""
     command = "+++"
 
     def cmd_mode_send(cmd):
@@ -452,6 +487,7 @@ async def test_command_mode_at_cmd(api):
 
 
 async def test_command_mode_at_cmd_timeout(api):
+    """Test AT in command mode with timeout."""
     command = "+++"
 
     api._uart.command_mode_send = mock.MagicMock()
@@ -461,6 +497,7 @@ async def test_command_mode_at_cmd_timeout(api):
 
 
 def test_handle_command_mode_rsp(api):
+    """Test command mode response."""
     api._cmd_mode_future = None
     data = "OK"
     api.handle_command_mode_rsp(data)
@@ -483,6 +520,7 @@ def test_handle_command_mode_rsp(api):
 
 
 async def test_enter_at_command_mode(api):
+    """Test switching to command mode."""
     api.command_mode_at_cmd = mock.AsyncMock(return_value=mock.sentinel.at_response)
 
     res = await api.enter_at_command_mode()
@@ -490,6 +528,7 @@ async def test_enter_at_command_mode(api):
 
 
 async def test_api_mode_at_commands(api):
+    """Test AT in API mode."""
     api.command_mode_at_cmd = mock.AsyncMock(return_value=mock.sentinel.api_mode)
 
     res = await api.api_mode_at_commands(57600)
@@ -506,6 +545,7 @@ async def test_api_mode_at_commands(api):
 
 
 async def test_init_api_mode(api, monkeypatch):
+    """Test init the API mode."""
     monkeypatch.setattr(api._uart, "baudrate", 57600)
     api.enter_at_command_mode = mock.AsyncMock(return_value=True)
 
@@ -534,22 +574,26 @@ async def test_init_api_mode(api, monkeypatch):
 
 
 def test_set_application(api):
+    """Test setting the application."""
     api.set_application(mock.sentinel.app)
     assert api._app == mock.sentinel.app
 
 
 def test_handle_route_record_indicator(api):
+    """Test api._handle_route_record_indicator()."""
     s = mock.sentinel
     api._handle_route_record_indicator(s.ieee, s.src, s.rx_opts, s.hops)
 
 
 def test_handle_many_to_one_rri(api):
+    """Test api._handle_many_to_one_rri()."""
     ieee = t.EUI64([t.uint8_t(a) for a in range(0, 8)])
     nwk = 0x1234
     api._handle_many_to_one_rri(ieee, nwk, 0)
 
 
 async def test_reconnect_multiple_disconnects(monkeypatch, caplog):
+    """Test reconnect with multiple disconnects."""
     api = xbee_api.XBee(DEVICE_CONFIG)
     connect_mock = mock.AsyncMock(return_value=True)
     monkeypatch.setattr(uart, "connect", connect_mock)
@@ -570,6 +614,7 @@ async def test_reconnect_multiple_disconnects(monkeypatch, caplog):
 
 
 async def test_reconnect_multiple_attempts(monkeypatch, caplog):
+    """Test reconnect with multiple attempts."""
     api = xbee_api.XBee(DEVICE_CONFIG)
     connect_mock = mock.AsyncMock(return_value=True)
     monkeypatch.setattr(uart, "connect", connect_mock)

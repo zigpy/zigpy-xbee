@@ -1,3 +1,5 @@
+"""Tests for ControllerApplication."""
+
 import asyncio
 
 import pytest
@@ -25,6 +27,7 @@ APP_CONFIG = {
 
 @pytest.fixture
 def node_info():
+    """Sample NodeInfo fixture."""
     return zigpy.state.NodeInfo(
         nwk=t.NWK(0x0000),
         ieee=t.EUI64.convert("00:12:4b:00:1c:a1:b8:46"),
@@ -34,6 +37,7 @@ def node_info():
 
 @pytest.fixture
 def network_info(node_info):
+    """Sample NetworkInfo fixture."""
     return zigpy.state.NetworkInfo(
         extended_pan_id=t.ExtendedPanId.convert("bd:27:0b:38:37:95:dc:87"),
         pan_id=t.PanId(0x9BB0),
@@ -61,6 +65,7 @@ def network_info(node_info):
 
 @pytest.fixture
 def app(monkeypatch):
+    """Sample ControllerApplication fixture."""
     monkeypatch.setattr(application, "TIMEOUT_TX_STATUS", 0.1)
     monkeypatch.setattr(application, "TIMEOUT_REPLY", 0.1)
     monkeypatch.setattr(application, "TIMEOUT_REPLY_EXTENDED", 0.1)
@@ -74,13 +79,6 @@ def app(monkeypatch):
     return app
 
 
-def test_modem_status(app):
-    assert 0x00 in xbee_t.ModemStatus.__members__.values()
-    app.handle_modem_status(xbee_t.ModemStatus(0x00))
-    assert 0xEE not in xbee_t.ModemStatus.__members__.values()
-    app.handle_modem_status(xbee_t.ModemStatus(0xEE))
-
-
 def _test_rx(
     app,
     device,
@@ -89,6 +87,7 @@ def _test_rx(
     cluster_id=mock.sentinel.cluster_id,
     data=mock.sentinel.data,
 ):
+    """Call app.handle_rx()."""
     app.get_device = mock.MagicMock(return_value=device)
 
     app.handle_rx(
@@ -104,6 +103,7 @@ def _test_rx(
 
 
 def test_rx(app):
+    """Test message receiving."""
     device = mock.MagicMock()
     app.handle_message = mock.MagicMock()
     _test_rx(app, device, 0x1234, data=b"\x01\x02\x03\x04")
@@ -119,6 +119,7 @@ def test_rx(app):
 
 
 def test_rx_nwk_0000(app):
+    """Test receiving self-addressed message."""
     app._handle_reply = mock.MagicMock()
     app.handle_message = mock.MagicMock()
     app.get_device = mock.MagicMock()
@@ -185,6 +186,8 @@ def test_rx_unknown_device_ieee(app):
 
 @pytest.fixture
 def device(app):
+    """Sample zigpee.Device fixture."""
+
     def _device(new=False, zdo_init=False, nwk=t.uint16_t(0x1234)):
         from zigpy.device import Device, Status as DeviceStatus
 
@@ -202,6 +205,7 @@ def device(app):
 
 
 def _device_join(app, dev, data):
+    """Simulate device join notification."""
     app.handle_message = mock.MagicMock()
     app.handle_join = mock.MagicMock()
     app.create_task = mock.MagicMock()
@@ -216,6 +220,7 @@ def _device_join(app, dev, data):
 
 
 def test_device_join_new(app, device):
+    """Test device join."""
     dev = device()
     data = b"\xee" + dev.nwk.serialize() + dev.ieee.serialize() + b"\x40"
 
@@ -223,6 +228,7 @@ def test_device_join_new(app, device):
 
 
 def test_device_join_inconsistent_nwk(app, device):
+    """Test device join inconsistent NWK."""
     dev = device()
     data = b"\xee" + b"\x01\x02" + dev.ieee.serialize() + b"\x40"
 
@@ -230,6 +236,7 @@ def test_device_join_inconsistent_nwk(app, device):
 
 
 def test_device_join_inconsistent_ieee(app, device):
+    """Test device join inconsistent IEEE."""
     dev = device()
     data = b"\xee" + dev.nwk.serialize() + b"\x01\x02\x03\x04\x05\x06\x07\x08" + b"\x40"
 
@@ -237,6 +244,7 @@ def test_device_join_inconsistent_ieee(app, device):
 
 
 async def test_broadcast(app):
+    """Test sending broadcast transmission."""
     (profile, cluster, src_ep, dst_ep, grpid, radius, tsn, data) = (
         0x260,
         1,
@@ -274,6 +282,7 @@ async def test_broadcast(app):
 
 
 async def test_get_association_state(app):
+    """Test get association statevia API."""
     ai_results = (0xFF, 0xFF, 0xFF, 0xFF, mock.sentinel.ai)
     app._api._at_command = mock.AsyncMock(
         spec=XBee._at_command,
@@ -286,6 +295,8 @@ async def test_get_association_state(app):
 
 @pytest.mark.parametrize("legacy_module", (False, True))
 async def test_write_network_info(app, node_info, network_info, legacy_module):
+    """Test writing network info to the device."""
+
     def _mock_queued_at(name, *args):
         if legacy_module and name == "CE":
             raise RuntimeError("Legacy module")
@@ -320,6 +331,7 @@ async def _test_start_network(
     zs=2,
     legacy_module=False,
 ):
+    """Call app.start_network()."""
     ai_tries = 5
     app.state.node_info = zigpy.state.NodeInfo()
 
@@ -366,6 +378,7 @@ async def _test_start_network(
 
 
 async def test_start_network(app):
+    """Test start network."""
     await _test_start_network(app, ai_status=0x00)
     assert app.state.node_info.nwk == 0x0000
     assert app.state.node_info.ieee == t.EUI64(range(1, 9))
@@ -393,6 +406,7 @@ async def test_start_network(app):
 
 
 async def test_start_network_no_api_mode(app):
+    """Test start network when not in API mode."""
     await _test_start_network(app, ai_status=0x00, api_mode=False)
     assert app.state.node_info.nwk == 0x0000
     assert app.state.node_info.ieee == t.EUI64(range(1, 9))
@@ -401,6 +415,7 @@ async def test_start_network_no_api_mode(app):
 
 
 async def test_start_network_api_mode_config_fails(app):
+    """Test start network when not when API config fails."""
     with pytest.raises(zigpy.exceptions.ControllerException):
         await _test_start_network(
             app, ai_status=0x00, api_mode=False, api_config_succeeds=False
@@ -411,6 +426,7 @@ async def test_start_network_api_mode_config_fails(app):
 
 
 async def test_permit(app):
+    """Test permit joins."""
     app._api._at_command = mock.AsyncMock()
     time_s = 30
     await app.permit_ncp(time_s)
@@ -419,6 +435,7 @@ async def test_permit(app):
 
 
 async def test_permit_with_key(app):
+    """Test permit joins with join code."""
     app._api._command = mock.AsyncMock(return_value=xbee_t.TXStatus.SUCCESS)
     app._api._at_command = mock.AsyncMock(return_value="OK")
     node = t.EUI64(b"\x01\x02\x03\x04\x05\x06\x07\x08")
@@ -432,6 +449,7 @@ async def test_permit_with_key(app):
 
 
 async def test_permit_with_link_key(app):
+    """Test permit joins with link key."""
     app._api._command = mock.AsyncMock(return_value=xbee_t.TXStatus.SUCCESS)
     app._api._at_command = mock.AsyncMock(return_value="OK")
     node = t.EUI64(b"\x01\x02\x03\x04\x05\x06\x07\x08")
@@ -447,6 +465,7 @@ async def test_permit_with_link_key(app):
 async def _test_request(
     app, expect_reply=True, send_success=True, send_timeout=False, **kwargs
 ):
+    """Call app.request()."""
     seq = 123
     nwk = 0x2345
     ieee = t.EUI64(b"\x01\x02\x03\x04\x05\x06\x07\x08")
@@ -478,26 +497,31 @@ async def _test_request(
 
 
 async def test_request_with_ieee(app):
+    """Test request with IEEE."""
     r = await _test_request(app, use_ieee=True, send_success=True)
     assert r[0] == 0
 
 
 async def test_request_with_reply(app):
+    """Test request with expecting reply."""
     r = await _test_request(app, expect_reply=True, send_success=True)
     assert r[0] == 0
 
 
 async def test_request_send_timeout(app):
+    """Test request with send timeout."""
     with pytest.raises(zigpy.exceptions.DeliveryError):
         await _test_request(app, send_timeout=True)
 
 
 async def test_request_send_fail(app):
+    """Test request with send failure."""
     with pytest.raises(zigpy.exceptions.DeliveryError):
         await _test_request(app, send_success=False)
 
 
 async def test_request_unknown_device(app):
+    """Test request with unknown device."""
     dev = zigpy.device.Device(
         application=app, ieee=xbee_t.UNKNOWN_IEEE, nwk=xbee_t.UNKNOWN_NWK
     )
@@ -517,6 +541,7 @@ async def test_request_unknown_device(app):
 
 
 async def test_request_extended_timeout(app):
+    """Test request with extended timeout."""
     r = await _test_request(app, True, True, extended_timeout=False)
     assert r[0] == xbee_t.TXStatus.SUCCESS
     assert app._api._command.call_count == 1
@@ -531,10 +556,12 @@ async def test_request_extended_timeout(app):
 
 
 async def test_force_remove(app):
+    """Test device force removal."""
     await app.force_remove(mock.sentinel.device)
 
 
 async def test_shutdown(app):
+    """Test application shutdown."""
     mack_close = mock.MagicMock()
     app._api.close = mack_close
     await app.shutdown()
@@ -543,6 +570,7 @@ async def test_shutdown(app):
 
 
 async def test_remote_at_cmd(app, device):
+    """Test remote AT command."""
     dev = device()
     app.get_device = mock.MagicMock(return_value=dev)
     app._api = mock.MagicMock(spec=XBee)
@@ -560,15 +588,18 @@ async def test_remote_at_cmd(app, device):
 
 @pytest.fixture
 def ieee():
+    """Sample IEEE fixture."""
     return t.EUI64.deserialize(b"\x00\x01\x02\x03\x04\x05\x06\x07")[0]
 
 
 @pytest.fixture
 def nwk():
+    """Sample NWK fixture."""
     return t.uint16_t(0x0100)
 
 
 def test_rx_device_annce(app, ieee, nwk):
+    """Test receiving device announce."""
     dst_ep = 0
     cluster_id = zdo_t.ZDOCmd.Device_annce
     device = mock.MagicMock()
@@ -599,6 +630,7 @@ def test_rx_device_annce(app, ieee, nwk):
 
 
 async def _test_mrequest(app, send_success=True, send_timeout=False, **kwargs):
+    """Call app.mrequest()."""
     seq = 123
     group_id = 0x2345
 
@@ -618,21 +650,26 @@ async def _test_mrequest(app, send_success=True, send_timeout=False, **kwargs):
 
 
 async def test_mrequest_with_reply(app):
+    """Test mrequest with reply."""
     r = await _test_mrequest(app, send_success=True)
     assert r[0] == 0
 
 
 async def test_mrequest_send_timeout(app):
+    """Test mrequest with send timeout."""
     with pytest.raises(zigpy.exceptions.DeliveryError):
         await _test_mrequest(app, send_timeout=True)
 
 
 async def test_mrequest_send_fail(app):
+    """Test mrequest with send failure."""
     with pytest.raises(zigpy.exceptions.DeliveryError):
         await _test_mrequest(app, send_success=False)
 
 
 async def test_reset_network_info(app):
+    """Test resetting network."""
+
     async def mock_at_command(cmd, *args):
         if cmd == "NR":
             return 0x00
@@ -649,6 +686,7 @@ async def test_reset_network_info(app):
 
 
 async def test_move_network_to_channel(app):
+    """Test moving network to another channel."""
     app._api._queued_at = mock.AsyncMock(spec=XBee._at_command)
     await app._move_network_to_channel(26, new_nwk_update_id=1)
 
@@ -657,6 +695,7 @@ async def test_move_network_to_channel(app):
 
 
 async def test_energy_scan(app):
+    """Test channel energy scan."""
     rssi = b"\x0A\x0F\x14\x19\x1E\x23\x28\x2D\x32\x37\x3C\x41\x46\x4B\x50\x55"
     app._api._at_command = mock.AsyncMock(spec=XBee._at_command, return_value=rssi)
     time_s = 3

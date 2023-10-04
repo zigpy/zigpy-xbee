@@ -1,36 +1,52 @@
+"""Additional types for data parsing."""
+
 import enum
 
 import zigpy.types as t
 
 
 class Bytes(bytes):
+    """Serializable and deserializable bytes."""
+
     def serialize(self):
+        """Serialize the class."""
         return self
 
     @classmethod
     def deserialize(cls, data):
+        """Deserialize the data into the class."""
         return cls(data), b""
 
 
 class ATCommand(Bytes):
+    """XBee AT command name."""
+
     @classmethod
     def deserialize(cls, data):
+        """Deserialize the data into the class."""
         return cls(data[:2]), data[2:]
 
 
 class EUI64(t.EUI64):
+    """EUI64 without prefix."""
+
     @classmethod
     def deserialize(cls, data):
+        """Deserialize the data into the class."""
         r, data = super().deserialize(data)
         return cls(r[::-1]), data
 
     def serialize(self):
+        """Serialize the class."""
         assert self._length == len(self)
         return super().serialize()[::-1]
 
 
 class UndefinedEnumMeta(enum.EnumMeta):
+    """Meta class for Enum that always has a value."""
+
     def __call__(cls, value=None, *args, **kwargs):
+        """Return the member, default, or undefined value."""
         if value is None:
             # the 1st enum member is default
             return next(iter(cls))
@@ -45,18 +61,22 @@ class UndefinedEnumMeta(enum.EnumMeta):
 
 
 class UndefinedEnum(enum.Enum, metaclass=UndefinedEnumMeta):
-    pass
+    """Enum that always has a value."""
 
 
 class FrameId(t.uint8_t):
-    pass
+    """API frame ID."""
 
 
 class NWK(t.uint16_t_be):
+    """zigpy.types.NWK but big endian."""
+
     def __repr__(self):
+        """Get printable representation."""
         return f"0x{self:04x}"
 
     def __str__(self):
+        """Get string representation."""
         return f"0x{self:04x}"
 
 
@@ -141,6 +161,8 @@ class DiscoveryStatus(t.uint8_t, UndefinedEnum):
 
 
 class TXOptions(t.bitmap8):
+    """TX Options for eplicit transmit frame."""
+
     NONE = 0x00
 
     Disable_Retries_and_Route_Repair = 0x01
@@ -149,6 +171,8 @@ class TXOptions(t.bitmap8):
 
 
 class ModemStatus(t.uint8_t, UndefinedEnum):
+    """Modem Status."""
+
     HARDWARE_RESET = 0x00
     WATCHDOG_TIMER_RESET = 0x01
     JOINED_NETWORK = 0x02
@@ -218,6 +242,8 @@ class ModemStatus(t.uint8_t, UndefinedEnum):
 
 
 class RegistrationStatus(t.uint8_t, UndefinedEnum):
+    """Key Registration Status."""
+
     SUCCESS = 0x00
     KEY_TOO_LONG = 0x01
     TRANSIENT_KEY_TABLE_IS_FULL = 0x18
