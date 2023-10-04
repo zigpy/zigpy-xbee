@@ -62,3 +62,18 @@ def test_nwk():
 
     assert str(nwk) == "0x1234"
     assert repr(nwk) == "0x1234"
+
+
+def test_eui64():
+    extra = b"\xBE\xEF"
+    data = b"01234567"
+
+    result, rest = xbee_t.EUI64.deserialize(data + extra)
+
+    assert rest == extra
+    assert result == xbee_t.EUI64((0x37, 0x36, 0x35, 0x34, 0x33, 0x32, 0x31, 0x30))
+
+    data = xbee_t.EUI64([t.uint8_t(i) for i in range(0x30, 0x38)])
+    result = data.serialize()
+
+    assert result == b"76543210"
