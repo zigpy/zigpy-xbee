@@ -413,6 +413,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     async def _routes_updated(
         self, ieee: zigpy.types.EUI64, routes: list[zdo_t.Route]
     ) -> None:
+        """Get RSSI for adjacent routers on Route update from Mgmt_Rtg_req."""
         for route in routes:
             if (
                 route.DstNWK == self.state.node_info.nwk

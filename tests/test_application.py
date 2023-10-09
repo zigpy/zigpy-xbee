@@ -686,6 +686,7 @@ async def test_energy_scan(app):
 
 
 def test_neighbors_updated(app, device):
+    """Test LQI from neighbour scan."""
     router = device(ieee=b"\x01\x02\x03\x04\x05\x06\x07\x08")
     router.radio_details = mock.MagicMock()
     end_device = device(ieee=b"\x08\x07\x06\x05\x04\x03\x02\x01")
@@ -746,6 +747,7 @@ def test_neighbors_updated(app, device):
 
 
 def test_routes_updated_schedule(app):
+    """Test scheduling the sync routes_updated function."""
     app.create_task = mock.MagicMock()
     app._routes_updated = mock.MagicMock()
 
@@ -758,6 +760,7 @@ def test_routes_updated_schedule(app):
 
 
 async def test_routes_updated(app, device):
+    """Test RSSI on routes scan update."""
     rssi = 0x50
     app._api._at_command = mock.AsyncMock(return_value=rssi)
 
