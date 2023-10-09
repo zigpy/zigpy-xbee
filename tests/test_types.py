@@ -88,11 +88,3 @@ def test_eui64():
     result = data.serialize()
 
     assert result == b"76543210"
-
-
-def test_modem_status(app):
-    """Test ModemStatus class."""
-    assert 0x00 in xbee_t.ModemStatus.__members__.values()
-    app.handle_modem_status(xbee_t.ModemStatus(0x00))
-    assert 0xEE not in xbee_t.ModemStatus.__members__.values()
-    app.handle_modem_status(xbee_t.ModemStatus(0xEE))

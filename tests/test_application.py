@@ -79,6 +79,14 @@ def app(monkeypatch):
     return app
 
 
+def test_modem_status(app):
+    """Test handling ModemStatus updates."""
+    assert 0x00 in xbee_t.ModemStatus.__members__.values()
+    app.handle_modem_status(xbee_t.ModemStatus(0x00))
+    assert 0xEE not in xbee_t.ModemStatus.__members__.values()
+    app.handle_modem_status(xbee_t.ModemStatus(0xEE))
+
+
 def _test_rx(
     app,
     device,
