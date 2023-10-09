@@ -393,12 +393,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         for neighbor in neighbors:
             if neighbor.relationship == zdo_t._NeighborEnums.Relationship.Parent:
                 device = self.get_device(ieee=ieee)
-                device.radio_details(lqi=neighbor.lqi, rssi=device.rssi)
+                device.radio_details(lqi=neighbor.lqi)
 
             elif neighbor.relationship == zdo_t._NeighborEnums.Relationship.Child:
                 try:
                     child_device = self.get_device(ieee=neighbor.ieee)
-                    child_device.radio_details(lqi=neighbor.lqi, rssi=child_device.rssi)
+                    child_device.radio_details(lqi=neighbor.lqi)
                 except KeyError:
                     LOGGER.warning("Unknown device %r", neighbor.ieee)
 
@@ -421,7 +421,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             ):
                 device = self.get_device(ieee=ieee)
                 rssi = await self._api._at_command("DB")
-                device.radio_details(lqi=device.lqi, rssi=-rssi)
+                device.radio_details(rssi=-rssi)
                 break
 
 

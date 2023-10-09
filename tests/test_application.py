@@ -741,8 +741,8 @@ def test_neighbors_updated(app, device):
 
     app.neighbors_updated(router.ieee, neighbors)
 
-    router.radio_details.assert_called_once_with(lqi=128, rssi=None)
-    end_device.radio_details.assert_called_once_with(lqi=100, rssi=None)
+    router.radio_details.assert_called_once_with(lqi=128)
+    end_device.radio_details.assert_called_once_with(lqi=100)
 
 
 def test_routes_updated_schedule(app):
@@ -794,7 +794,7 @@ async def test_routes_updated(app, device):
 
     await app._routes_updated(router1.ieee, routes)
 
-    router1.radio_details.assert_called_once_with(lqi=None, rssi=-80)
+    router1.radio_details.assert_called_once_with(rssi=-80)
     assert router2.radio_details.call_count == 0
 
     router1.radio_details.reset_mock()
