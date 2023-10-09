@@ -113,7 +113,7 @@ async def test_command_not_connected(api):
 
     api._api_frame = mock.MagicMock(side_effect=mock_api_frame)
 
-    for cmd, cmd_opts in xbee_api.COMMAND_REQUESTS.items():
+    for cmd, _cmd_opts in xbee_api.COMMAND_REQUESTS.items():
         with pytest.raises(zigpy.exceptions.APIException):
             await api._command(cmd, mock.sentinel.cmd_data)
         assert api._api_frame.call_count == 0

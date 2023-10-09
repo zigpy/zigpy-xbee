@@ -188,7 +188,9 @@ def test_rx_unknown_device_ieee(app):
 def device(app):
     """Sample zigpee.Device fixture."""
 
-    def _device(new=False, zdo_init=False, nwk=t.uint16_t(0x1234)):
+    nwk = t.uint16_t(0x1234)
+
+    def _device(new=False, zdo_init=False, nwk=nwk):
         from zigpy.device import Device, Status as DeviceStatus
 
         ieee, _ = t.EUI64.deserialize(b"\x08\x07\x06\x05\x04\x03\x02\x01")
@@ -701,7 +703,7 @@ async def test_energy_scan(app):
     time_s = 3
     count = 3
     energy = await app.energy_scan(
-        channels=[x for x in range(11, 27)], duration_exp=time_s, count=count
+        channels=list(range(11, 27)), duration_exp=time_s, count=count
     )
     assert app._api._at_command.mock_calls == [mock.call("ED", time_s)] * count
     assert {k: round(v, 3) for k, v in energy.items()} == {
