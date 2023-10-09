@@ -1,7 +1,7 @@
 # zigpy-xbee
 
-[![Build Status](https://travis-ci.org/zigpy/zigpy-xbee.svg?branch=master)](https://travis-ci.org/zigpy/zigpy-xbee)
-[![Coverage](https://coveralls.io/repos/github/zigpy/zigpy-xbee/badge.svg?branch=master)](https://coveralls.io/github/zigpy/zigpy-xbee?branch=master)
+[![Build Status](https://github.com/zigpy/zigpy-xbee/workflows/CI/badge.svg)](https://github.com/zigpy/zigpy-xbee/actions)
+[![Coverage Status](https://codecov.io/gh/zigpy/zigpy-xbee/branch/dev/graph/badge.svg?token=Y1994N9D74)](https://codecov.io/gh/zigpy/zigpy-xbee)
 
 [zigpy-xbee](https://github.com/zigpy/zigpy-xbee/) is a Python implementation for the [Zigpy](https://github.com/zigpy/) project to implement [XBee](https://en.wikipedia.org/wiki/XBee) based [Zigbee](https://www.zigbee.org) radio devices from Digi.
 
