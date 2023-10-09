@@ -6,7 +6,7 @@ import zigpy.state
 import zigpy.types as t
 import zigpy.zdo.types as zdo_t
 
-from zigpy_xbee.api import ModemStatus, XBee
+from zigpy_xbee.api import XBee
 import zigpy_xbee.config as config
 import zigpy_xbee.types as xbee_t
 from zigpy_xbee.zigbee import application
@@ -74,10 +74,10 @@ def app(monkeypatch):
 
 
 def test_modem_status(app):
-    assert 0x00 in ModemStatus.__members__.values()
-    app.handle_modem_status(ModemStatus(0x00))
-    assert 0xEE not in ModemStatus.__members__.values()
-    app.handle_modem_status(ModemStatus(0xEE))
+    assert 0x00 in xbee_t.ModemStatus.__members__.values()
+    app.handle_modem_status(xbee_t.ModemStatus(0x00))
+    assert 0xEE not in xbee_t.ModemStatus.__members__.values()
+    app.handle_modem_status(xbee_t.ModemStatus(0xEE))
 
 
 def _test_rx(
