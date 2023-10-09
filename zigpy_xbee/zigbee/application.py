@@ -391,11 +391,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     ) -> None:
         """Neighbor update from Mgmt_Lqi_req."""
         for neighbor in neighbors:
-            if neighbor.relationship == zdo_t._NeighborEnums.Relationship.Parent:
+            if neighbor.relationship == zdo_t.Neighbor.Relationship.Parent:
                 device = self.get_device(ieee=ieee)
                 device.radio_details(lqi=neighbor.lqi)
 
-            elif neighbor.relationship == zdo_t._NeighborEnums.Relationship.Child:
+            elif neighbor.relationship == zdo_t.Neighbor.Relationship.Child:
                 try:
                     child_device = self.get_device(ieee=neighbor.ieee)
                     child_device.radio_details(lqi=neighbor.lqi)
