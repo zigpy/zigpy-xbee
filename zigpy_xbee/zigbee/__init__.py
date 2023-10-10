@@ -1,1 +1,1 @@
-"""ApplicationController implementation."""
+"""XBee ControllerApplication implementation."""
