@@ -194,7 +194,7 @@ def test_rx_unknown_device_ieee(app):
 
 @pytest.fixture
 def device(app):
-    """Sample zigpy.Device fixture."""
+    """Sample zigpy.device.Device fixture."""
 
     def _device(
         new=False, zdo_init=False, nwk=0x1234, ieee=b"\x08\x07\x06\x05\x04\x03\x02\x01"
