@@ -1,3 +1,5 @@
+"""Init file for zigpy_xbee."""
+
 MAJOR_VERSION = 0
 MINOR_VERSION = 18
 PATCH_VERSION = "3"

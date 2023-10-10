@@ -1,3 +1,5 @@
+"""XBee API implementation."""
+
 import asyncio
 import binascii
 import enum
@@ -260,6 +262,8 @@ BAUDRATE_TO_BD = {
 
 
 class ATCommandResult(enum.IntEnum):
+    """AT Command Result."""
+
     OK = 0
     ERROR = 1
     INVALID_COMMAND = 2
@@ -268,7 +272,10 @@ class ATCommandResult(enum.IntEnum):
 
 
 class XBee:
+    """Class implementing XBee communication protocol."""
+
     def __init__(self, device_config: Dict[str, Any]) -> None:
+        """Initialize instance."""
         self._config = device_config
         self._uart: Optional[uart.Gateway] = None
         self._seq: int = 1
@@ -301,13 +308,14 @@ class XBee:
         application: "zigpy_xbee.zigbee.application.ControllerApplication",
         config: Dict[str, Any],
     ) -> "XBee":
-        """Create new instance from"""
+        """Create new instance."""
         xbee_api = cls(config)
         await xbee_api.connect()
         xbee_api.set_application(application)
         return xbee_api
 
     async def connect(self) -> None:
+        """Connect to the device."""
         assert self._uart is None
         self._uart = await uart.connect(self._config, self)
 
@@ -364,6 +372,7 @@ class XBee:
         )
 
     def close(self):
+        """Close the connection."""
         if self._conn_lost_task:
             self._conn_lost_task.cancel()
             self._conn_lost_task = None
@@ -373,6 +382,7 @@ class XBee:
             self._uart = None
 
     def _command(self, name, *args, mask_frame_id=False):
+        """Send API frame to the device."""
         LOGGER.debug("Command %s %s", name, args)
         if self._uart is None:
             raise APIException("API is not running")
@@ -387,6 +397,7 @@ class XBee:
         return future
 
     async def _remote_at_command(self, ieee, nwk, options, name, *args):
+        """Execute AT command on a different XBee module in the network."""
         LOGGER.debug("Remote AT command: %s %s", name, args)
         data = t.serialize(args, (AT_COMMANDS[name],))
         try:
@@ -416,10 +427,12 @@ class XBee:
     _queued_at = functools.partialmethod(_at_partial, "queued_at")
 
     def _api_frame(self, name, *args):
+        """Build API frame."""
         c = COMMAND_REQUESTS[name]
         return (bytes([c[0]]) + t.serialize(args, c[1])), c[2]
 
     def frame_received(self, data):
+        """Handle API frame from the device."""
         command = self._commands_by_id[data[0]]
         LOGGER.debug("Frame received: %s", command)
         data, rest = t.deserialize(data[1:], COMMAND_RESPONSES[command][1])
@@ -429,6 +442,7 @@ class XBee:
             LOGGER.error("No '%s' handler. Data: %s", command, binascii.hexlify(data))
 
     def _handle_at_response(self, frame_id, cmd, status, value):
+        """Local AT command response."""
         (fut,) = self._awaiting.pop(frame_id)
         try:
             status = ATCommandResult(status)
@@ -528,6 +542,7 @@ class XBee:
         fut.set_result(status)
 
     def set_application(self, app):
+        """Set reference to ControllerApplication."""
         self._app = app
 
     def handle_command_mode_rsp(self, data):
@@ -543,7 +558,7 @@ class XBee:
             fut.set_result(data)
 
     async def command_mode_at_cmd(self, command):
-        """Sends AT command in command mode."""
+        """Send AT command in command mode."""
         self._cmd_mode_future = asyncio.Future()
         self._uart.command_mode_send(command.encode("ascii"))
 
@@ -620,7 +635,7 @@ class XBee:
         return False
 
     async def _probe(self) -> None:
-        """Open port and try sending a command"""
+        """Open port and try sending a command."""
         await self.connect()
         try:
             # Ensure we have escaped commands
@@ -632,6 +647,7 @@ class XBee:
             self.close()
 
     def __getattr__(self, item):
+        """Handle supported command requests."""
         if item in COMMAND_REQUESTS:
             return functools.partial(self._command, item)
         raise AttributeError(f"Unknown command {item}")
