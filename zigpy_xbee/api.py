@@ -1,3 +1,5 @@
+"""XBee API implementation."""
+
 import asyncio
 import binascii
 import enum
@@ -7,11 +9,12 @@ from typing import Any, Dict, Optional
 
 import serial
 from zigpy.exceptions import APIException, DeliveryError
+import zigpy.types as t
 
 import zigpy_xbee
 from zigpy_xbee.config import CONF_DEVICE_BAUDRATE, CONF_DEVICE_PATH, SCHEMA_DEVICE
 
-from . import types as t, uart
+from . import types as xbee_t, uart
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,132 +23,66 @@ REMOTE_AT_COMMAND_TIMEOUT = 30
 PROBE_TIMEOUT = 45
 
 
-class ModemStatus(t.uint8_t, t.UndefinedEnum):
-    HARDWARE_RESET = 0x00
-    WATCHDOG_TIMER_RESET = 0x01
-    JOINED_NETWORK = 0x02
-    DISASSOCIATED = 0x03
-    CONFIGURATION_ERROR_SYNCHRONIZATION_LOST = 0x04
-    COORDINATOR_REALIGNMENT = 0x05
-    COORDINATOR_STARTED = 0x06
-    NETWORK_SECURITY_KEY_UPDATED = 0x07
-    NETWORK_WOKE_UP = 0x0B
-    NETWORK_WENT_TO_SLEEP = 0x0C
-    VOLTAGE_SUPPLY_LIMIT_EXCEEDED = 0x0D
-    DEVICE_CLOUD_CONNECTED = 0x0E
-    DEVICE_CLOUD_DISCONNECTED = 0x0F
-    MODEM_KEY_ESTABLISHED = 0x10
-    MODEM_CONFIGURATION_CHANGED_WHILE_JOIN_IN_PROGRESS = 0x11
-    ACCESS_FAULT = 0x12
-    FATAL_STACK_ERROR = 0x13
-    PLKE_TABLE_INITIATED = 0x14
-    PLKE_TABLE_SUCCESS = 0x15
-    PLKE_TABLE_IS_FULL = 0x16
-    PLKE_NOT_AUTHORIZED = 0x17
-    PLKE_INVALID_TRUST_CENTER_REQUEST = 0x18
-    PLKE_TRUST_CENTER_UPDATE_FAIL = 0x19
-    PLKE_BAD_EUI_ADDRESS = 0x1A
-    PLKE_LINK_KEY_REJECTED = 0x1B
-    PLKE_UPDATE_OCCURED = 0x1C
-    PLKE_LINK_KEY_TABLE_CLEAR = 0x1D
-    ZIGBEE_FREQUENCY_AGILITY_HAS_REQUESTED_CHANNEL_CHANGE = 0x1E
-    ZIGBEE_EXECUTE_ATFR_NO_JOINABLE_BEACON_RESPONSES = 0x1F
-    ZIGBEE_TOKENS_SPACE_RECOVERED = 0x20
-    ZIGBEE_TOKENS_SPACE_UNRECOVERABLE = 0x21
-    ZIGBEE_TOKENS_SPACE_CORRUPTED = 0x22
-    ZIGBEE_DUAL_MODE_METAFRAME_ERROR = 0x30
-    BLE_CONNECT = 0x32
-    BLE_DISCONNECT = 0x33
-    NO_SECURE_SESSION_CONNECTION = 0x34
-    CELL_COMPONENT_UPDATE_STARTED = 0x35
-    CELL_COMPONENT_UPDATE_FAILED = 0x36
-    CELL_COMPONENT_UPDATE_SUCCEDED = 0x37
-    XBEE_FIRMWARE_UPDATE_STARTED = 0x38
-    XBEE_FIRMWARE_UPDATE_FAILED = 0x39
-    XBEE_WILL_RESET_TO_APPLY_FIRMWARE_UPDATE = 0x3A
-    SECURE_SESSION_SUCCESSFULLY_ESTABLISHED = 0x3B
-    SECURE_SESSION_ENDED = 0x3C
-    SECURE_SESSION_AUTHENTICATION_FAILED = 0x3D
-    PAN_ID_CONFLICT_DETECTED = 0x3E
-    PAN_ID_UPDATED_DUE_TO_CONFLICT = 0x3F
-    ROUTER_PAN_ID_CHANGED_BY_COORDINATOR_DUE_TO_CONFLICT = 0x40
-    NETWORK_WATCHDOG_TIMEOUT_EXPIRED_THREE_TIMES = 0x42
-    JOIN_WINDOW_OPENED = 0x43
-    JOIN_WINDOW_CLOSED = 0x44
-    NETWORK_SECURITY_KEY_ROTATION_INITIATED = 0x45
-    STACK_RESET = 0x80
-    FIB_BOOTLOADER_RESET = 0x81
-    SEND_OR_JOIN_COMMAND_ISSUED_WITHOUT_CONNECTING_FROM_AP = 0x82
-    ACCESS_POINT_NOT_FOUND = 0x83
-    PSK_NOT_CONFIGURED = 0x84
-    SSID_NOT_FOUND = 0x87
-    FAILED_TO_JOIN_WITH_SECURITY_ENABLED = 0x88
-    COER_LOCKUP_OR_CRYSTAL_FAILURE_RESET = 0x89
-    INVALID_CHANNEL = 0x8A
-    LOW_VOLTAGE_RESET = 0x8B
-    FAILED_TO_JOIN_ACCESS_POINT = 0x8E
-
-    UNKNOWN_MODEM_STATUS = 0xFF
-    _UNDEFINED = 0xFF
-
-
-class RegistrationStatus(t.uint8_t, t.UndefinedEnum):
-    SUCCESS = 0x00
-    KEY_TOO_LONG = 0x01
-    TRANSIENT_KEY_TABLE_IS_FULL = 0x18
-    ADDRESS_NOT_FOUND_IN_THE_KEY_TABLE = 0xB1
-    KEY_IS_INVALID_OR_RESERVED = 0xB2
-    INVALID_ADDRESS = 0xB3
-    KEY_TABLE_IS_FULL = 0xB4
-    SECURITY_DATA_IS_INVALID_INSTALL_CODE_CRC_FAILS = 0xBD
-
-    UNKNOWN_MODEM_STATUS = 0xFF
-    _UNDEFINED = 0xFF
-
-
 # https://www.digi.com/resources/documentation/digidocs/PDFs/90000976.pdf
 COMMAND_REQUESTS = {
-    "at": (0x08, (t.FrameId, t.ATCommand, t.Bytes), 0x88),
-    "queued_at": (0x09, (t.FrameId, t.ATCommand, t.Bytes), 0x88),
+    "at": (0x08, (xbee_t.FrameId, xbee_t.ATCommand, xbee_t.Bytes), 0x88),
+    "queued_at": (0x09, (xbee_t.FrameId, xbee_t.ATCommand, xbee_t.Bytes), 0x88),
     "remote_at": (
         0x17,
-        (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.ATCommand, t.Bytes),
+        (
+            xbee_t.FrameId,
+            xbee_t.EUI64,
+            xbee_t.NWK,
+            t.uint8_t,
+            xbee_t.ATCommand,
+            xbee_t.Bytes,
+        ),
         0x97,
     ),
     "tx": (0x10, (), None),
     "tx_explicit": (
         0x11,
         (
-            t.FrameId,
-            t.EUI64,
-            t.NWK,
+            xbee_t.FrameId,
+            xbee_t.EUI64,
+            xbee_t.NWK,
             t.uint8_t,
             t.uint8_t,
-            t.uint16_t,
-            t.uint16_t,
+            t.uint16_t_be,
+            t.uint16_t_be,
             t.uint8_t,
             t.uint8_t,
-            t.Bytes,
+            xbee_t.Bytes,
         ),
         0x8B,
     ),
     "create_source_route": (
         0x21,
-        (t.FrameId, t.EUI64, t.NWK, t.uint8_t, t.Relays),
+        (xbee_t.FrameId, xbee_t.EUI64, xbee_t.NWK, t.uint8_t, xbee_t.Relays),
         None,
     ),
     "register_joining_device": (
         0x24,
-        (t.FrameId, t.EUI64, t.uint16_t, t.uint8_t, t.Bytes),
+        (xbee_t.FrameId, xbee_t.EUI64, t.uint16_t_be, t.uint8_t, xbee_t.Bytes),
         0xA4,
     ),
 }
 COMMAND_RESPONSES = {
-    "at_response": (0x88, (t.FrameId, t.ATCommand, t.uint8_t, t.Bytes), None),
-    "modem_status": (0x8A, (ModemStatus,), None),
+    "at_response": (
+        0x88,
+        (xbee_t.FrameId, xbee_t.ATCommand, t.uint8_t, xbee_t.Bytes),
+        None,
+    ),
+    "modem_status": (0x8A, (xbee_t.ModemStatus,), None),
     "tx_status": (
         0x8B,
-        (t.FrameId, t.NWK, t.uint8_t, t.TXStatus, t.DiscoveryStatus),
+        (
+            xbee_t.FrameId,
+            xbee_t.NWK,
+            t.uint8_t,
+            xbee_t.TXStatus,
+            xbee_t.DiscoveryStatus,
+        ),
         None,
     ),
     "route_information": (0x8D, (), None),
@@ -153,74 +90,85 @@ COMMAND_RESPONSES = {
     "explicit_rx_indicator": (
         0x91,
         (
-            t.EUI64,
-            t.NWK,
+            xbee_t.EUI64,
+            xbee_t.NWK,
             t.uint8_t,
             t.uint8_t,
-            t.uint16_t,
-            t.uint16_t,
+            t.uint16_t_be,
+            t.uint16_t_be,
             t.uint8_t,
-            t.Bytes,
+            xbee_t.Bytes,
         ),
         None,
     ),
     "rx_io_data_long_addr": (0x92, (), None),
     "remote_at_response": (
         0x97,
-        (t.FrameId, t.EUI64, t.NWK, t.ATCommand, t.uint8_t, t.Bytes),
+        (
+            xbee_t.FrameId,
+            xbee_t.EUI64,
+            xbee_t.NWK,
+            xbee_t.ATCommand,
+            t.uint8_t,
+            xbee_t.Bytes,
+        ),
         None,
     ),
     "extended_status": (0x98, (), None),
-    "route_record_indicator": (0xA1, (t.EUI64, t.NWK, t.uint8_t, t.Relays), None),
-    "many_to_one_rri": (0xA3, (t.EUI64, t.NWK, t.uint8_t), None),
-    "registration_status": (0xA4, (t.FrameId, RegistrationStatus), None),
+    "route_record_indicator": (
+        0xA1,
+        (xbee_t.EUI64, xbee_t.NWK, t.uint8_t, xbee_t.Relays),
+        None,
+    ),
+    "many_to_one_rri": (0xA3, (xbee_t.EUI64, xbee_t.NWK, t.uint8_t), None),
+    "registration_status": (0xA4, (xbee_t.FrameId, xbee_t.RegistrationStatus), None),
     "node_id_indicator": (0x95, (), None),
 }
 
 # https://www.digi.com/resources/documentation/digidocs/pdfs/90001539.pdf pg 175
 AT_COMMANDS = {
     # Addressing commands
-    "DH": t.uint32_t,
-    "DL": t.uint32_t,
-    "MY": t.uint16_t,
-    "MP": t.uint16_t,
-    "NC": t.uint32_t,  # 0 - MAX_CHILDREN.
-    "SH": t.uint32_t,
-    "SL": t.uint32_t,
+    "DH": t.uint32_t_be,
+    "DL": t.uint32_t_be,
+    "MY": t.uint16_t_be,
+    "MP": t.uint16_t_be,
+    "NC": t.uint32_t_be,  # 0 - MAX_CHILDREN.
+    "SH": t.uint32_t_be,
+    "SL": t.uint32_t_be,
     "NI": t,  # 20 byte printable ascii string
     "SE": t.uint8_t,
     "DE": t.uint8_t,
-    "CI": t.uint16_t,
+    "CI": t.uint16_t_be,
     "TO": t.uint8_t,
-    "NP": t.uint16_t,
-    "DD": t.uint32_t,
+    "NP": t.uint16_t_be,
+    "DD": t.uint32_t_be,
     "CR": t.uint8_t,  # 0 - 0x3F
     # Networking commands
     "CH": t.uint8_t,  # 0x0B - 0x1A
     "DA": t,  # no param
-    "ID": t.uint64_t,
-    "OP": t.uint64_t,
+    "ID": t.uint64_t_be,
+    "OP": t.uint64_t_be,
     "NH": t.uint8_t,
     "BH": t.uint8_t,  # 0 - 0x1E
-    "OI": t.uint16_t,
+    "OI": t.uint16_t_be,
     "NT": t.uint8_t,  # 0x20 - 0xFF
     "NO": t.uint8_t,  # bitfield, 0 - 3
-    "SC": t.uint16_t,  # 1 - 0xFFFF
+    "SC": t.uint16_t_be,  # 1 - 0xFFFF
     "SD": t.uint8_t,  # 0 - 7
     "ZS": t.uint8_t,  # 0 - 2
     "NJ": t.uint8_t,
     "JV": t.Bool,
-    "NW": t.uint16_t,  # 0 - 0x64FF
+    "NW": t.uint16_t_be,  # 0 - 0x64FF
     "JN": t.Bool,
     "AR": t.uint8_t,
     "DJ": t.Bool,  # WTF, docs
-    "II": t.uint16_t,
+    "II": t.uint16_t_be,
     # Security commands
     "EE": t.Bool,
     "EO": t.uint8_t,
-    "NK": t.Bytes,  # 128-bit value
-    "KY": t.Bytes,  # 128-bit value
-    "KT": t.uint16_t,  # 0x1E - 0xFFFF
+    "NK": xbee_t.Bytes,  # 128-bit value
+    "KY": xbee_t.Bytes,  # 128-bit value
+    "KT": t.uint16_t_be,  # 0x1E - 0xFFFF
     # RF interfacing commands
     "PL": t.uint8_t,  # 0 - 4 (basically an Enum)
     "PM": t.Bool,
@@ -237,10 +185,10 @@ AT_COMMANDS = {
     "P3": t.uint8_t,  # 0 - 5 (an Enum)
     "P4": t.uint8_t,  # 0 - 5 (an Enum)
     # MAC diagnostics commands
-    "ED": t.Bytes,  # 16-byte value
+    "ED": xbee_t.Bytes,  # 16-byte value
     # I/O commands
-    "IR": t.uint16_t,
-    "IC": t.uint16_t,
+    "IR": t.uint16_t_be,
+    "IC": t.uint16_t_be,
     "D0": t.uint8_t,  # 0 - 5 (an Enum)
     "D1": t.uint8_t,  # 0 - 5 (an Enum)
     "D2": t.uint8_t,  # 0 - 5 (an Enum)
@@ -258,31 +206,31 @@ AT_COMMANDS = {
     "P8": t.uint8_t,  # 0 - 5 (an Enum)
     "P9": t.uint8_t,  # 0 - 5 (an Enum)
     "LT": t.uint8_t,
-    "PR": t.uint16_t,
+    "PR": t.uint16_t_be,
     "RP": t.uint8_t,
-    "%V": t.uint16_t,  # read only
-    "V+": t.uint16_t,
-    "TP": t.uint16_t,
-    "M0": t.uint16_t,  # 0 - 0x3FF
-    "M1": t.uint16_t,  # 0 - 0x3FF
+    "%V": t.uint16_t_be,  # read only
+    "V+": t.uint16_t_be,
+    "TP": t.uint16_t_be,
+    "M0": t.uint16_t_be,  # 0 - 0x3FF
+    "M1": t.uint16_t_be,  # 0 - 0x3FF
     # Diagnostics commands
-    "VR": t.uint16_t,
-    "HV": t.uint16_t,
+    "VR": t.uint16_t_be,
+    "HV": t.uint16_t_be,
     "AI": t.uint8_t,
     # AT command options
-    "CT": t.uint16_t,  # 2 - 0x028F
+    "CT": t.uint16_t_be,  # 2 - 0x028F
     "CN": None,
-    "GT": t.uint16_t,
+    "GT": t.uint16_t_be,
     "CC": t.uint8_t,
     # Sleep commands
     "SM": t.uint8_t,
-    "SN": t.uint16_t,
-    "SP": t.uint16_t,
-    "ST": t.uint16_t,
+    "SN": t.uint16_t_be,
+    "SP": t.uint16_t_be,
+    "ST": t.uint16_t_be,
     "SO": t.uint8_t,
-    "WH": t.uint16_t,
+    "WH": t.uint16_t_be,
     "SI": None,
-    "PO": t.uint16_t,  # 0 - 0x3E8
+    "PO": t.uint16_t_be,  # 0 - 0x3E8
     # Execution commands
     "AC": None,
     "WR": None,
@@ -291,7 +239,7 @@ AT_COMMANDS = {
     "NR": t.Bool,
     "CB": t.uint8_t,
     "ND": t,  # "optional 2-Byte NI value"
-    "DN": t.Bytes,  # "up to 20-Byte printable ASCII string"
+    "DN": xbee_t.Bytes,  # "up to 20-Byte printable ASCII string"
     "IS": None,
     "1S": None,
     "AS": None,
@@ -314,6 +262,8 @@ BAUDRATE_TO_BD = {
 
 
 class ATCommandResult(enum.IntEnum):
+    """AT Command Result."""
+
     OK = 0
     ERROR = 1
     INVALID_COMMAND = 2
@@ -322,7 +272,10 @@ class ATCommandResult(enum.IntEnum):
 
 
 class XBee:
+    """Class implementing XBee communication protocol."""
+
     def __init__(self, device_config: Dict[str, Any]) -> None:
+        """Initialize instance."""
         self._config = device_config
         self._uart: Optional[uart.Gateway] = None
         self._seq: int = 1
@@ -355,13 +308,14 @@ class XBee:
         application: "zigpy_xbee.zigbee.application.ControllerApplication",
         config: Dict[str, Any],
     ) -> "XBee":
-        """Create new instance from"""
+        """Create new instance."""
         xbee_api = cls(config)
         await xbee_api.connect()
         xbee_api.set_application(application)
         return xbee_api
 
     async def connect(self) -> None:
+        """Connect to the device."""
         assert self._uart is None
         self._uart = await uart.connect(self._config, self)
 
@@ -418,6 +372,7 @@ class XBee:
         )
 
     def close(self):
+        """Close the connection."""
         if self._conn_lost_task:
             self._conn_lost_task.cancel()
             self._conn_lost_task = None
@@ -427,6 +382,7 @@ class XBee:
             self._uart = None
 
     def _command(self, name, *args, mask_frame_id=False):
+        """Send API frame to the device."""
         LOGGER.debug("Command %s %s", name, args)
         if self._uart is None:
             raise APIException("API is not running")
@@ -441,6 +397,7 @@ class XBee:
         return future
 
     async def _remote_at_command(self, ieee, nwk, options, name, *args):
+        """Execute AT command on a different XBee module in the network."""
         LOGGER.debug("Remote AT command: %s %s", name, args)
         data = t.serialize(args, (AT_COMMANDS[name],))
         try:
@@ -470,10 +427,12 @@ class XBee:
     _queued_at = functools.partialmethod(_at_partial, "queued_at")
 
     def _api_frame(self, name, *args):
+        """Build API frame."""
         c = COMMAND_REQUESTS[name]
         return (bytes([c[0]]) + t.serialize(args, c[1])), c[2]
 
     def frame_received(self, data):
+        """Handle API frame from the device."""
         command = self._commands_by_id[data[0]]
         LOGGER.debug("Frame received: %s", command)
         data, rest = t.deserialize(data[1:], COMMAND_RESPONSES[command][1])
@@ -483,6 +442,7 @@ class XBee:
             LOGGER.error("No '%s' handler. Data: %s", command, binascii.hexlify(data))
 
     def _handle_at_response(self, frame_id, cmd, status, value):
+        """Local AT command response."""
         (fut,) = self._awaiting.pop(frame_id)
         try:
             status = ATCommandResult(status)
@@ -515,12 +475,15 @@ class XBee:
     def _handle_modem_status(self, status):
         LOGGER.debug("Handle modem status frame: %s", status)
         status = status
-        if status == ModemStatus.COORDINATOR_STARTED:
+        if status == xbee_t.ModemStatus.COORDINATOR_STARTED:
             self.coordinator_started_event.set()
-        elif status in (ModemStatus.HARDWARE_RESET, ModemStatus.WATCHDOG_TIMER_RESET):
+        elif status in (
+            xbee_t.ModemStatus.HARDWARE_RESET,
+            xbee_t.ModemStatus.WATCHDOG_TIMER_RESET,
+        ):
             self.reset_event.set()
             self.coordinator_started_event.clear()
-        elif status == ModemStatus.DISASSOCIATED:
+        elif status == xbee_t.ModemStatus.DISASSOCIATED:
             self.coordinator_started_event.clear()
 
         if self._app:
@@ -559,9 +522,9 @@ class XBee:
 
         try:
             if tx_status in (
-                t.TXStatus.BROADCAST_APS_TX_ATTEMPT,
-                t.TXStatus.SELF_ADDRESSED,
-                t.TXStatus.SUCCESS,
+                xbee_t.TXStatus.BROADCAST_APS_TX_ATTEMPT,
+                xbee_t.TXStatus.SELF_ADDRESSED,
+                xbee_t.TXStatus.SUCCESS,
             ):
                 fut.set_result(tx_status)
             else:
@@ -579,6 +542,7 @@ class XBee:
         fut.set_result(status)
 
     def set_application(self, app):
+        """Set reference to ControllerApplication."""
         self._app = app
 
     def handle_command_mode_rsp(self, data):
@@ -594,7 +558,7 @@ class XBee:
             fut.set_result(data)
 
     async def command_mode_at_cmd(self, command):
-        """Sends AT command in command mode."""
+        """Send AT command in command mode."""
         self._cmd_mode_future = asyncio.Future()
         self._uart.command_mode_send(command.encode("ascii"))
 
@@ -671,7 +635,7 @@ class XBee:
         return False
 
     async def _probe(self) -> None:
-        """Open port and try sending a command"""
+        """Open port and try sending a command."""
         await self.connect()
         try:
             # Ensure we have escaped commands
@@ -683,6 +647,7 @@ class XBee:
             self.close()
 
     def __getattr__(self, item):
+        """Handle supported command requests."""
         if item in COMMAND_REQUESTS:
             return functools.partial(self._command, item)
         raise AttributeError(f"Unknown command {item}")

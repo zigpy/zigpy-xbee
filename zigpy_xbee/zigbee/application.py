@@ -1,10 +1,11 @@
+"""ControllerApplication for XBee adapters."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import math
 import statistics
-import time
 from typing import Any
 
 import zigpy.application
@@ -38,12 +39,15 @@ XBEE_ENDPOINT_ID = 0xE6
 
 
 class ControllerApplication(zigpy.application.ControllerApplication):
+    """Implementation of Zigpy ControllerApplication for XBee devices."""
+
     SCHEMA = CONFIG_SCHEMA
     SCHEMA_DEVICE = SCHEMA_DEVICE
 
     probe = zigpy_xbee.api.XBee.probe
 
     def __init__(self, config: dict[str, Any]):
+        """Initialize instance."""
         super().__init__(config=zigpy.config.ZIGPY_SCHEMA(config))
         self._api: zigpy_xbee.api.XBee | None = None
         self.topology.add_listener(self)
@@ -55,6 +59,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self._api = None
 
     async def connect(self):
+        """Connect to the device."""
         self._api = await zigpy_xbee.api.XBee.new(self, self._config[CONF_DEVICE])
         try:
             # Ensure we have escaped commands
@@ -67,6 +72,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 )
 
     async def start_network(self):
+        """Configure the module to work with Zigpy."""
         association_state = await asyncio.wait_for(
             self._get_association_state(), timeout=4
         )
@@ -110,6 +116,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self.register_endpoints()
 
     async def load_network_info(self, *, load_devices=False):
+        """Load supported parameters of network_info and node_info from the device."""
         # Load node info
         node_info = self.state.node_info
         node_info.nwk = zigpy.types.NWK(await self._api._at_command("MY"))
@@ -141,9 +148,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         network_info.channel = await self._api._at_command("CH")
 
     async def reset_network_info(self) -> None:
+        """Reset Zigbee network."""
         await self._api._at_command("NR", 0)
 
     async def write_network_info(self, *, network_info, node_info):
+        """Write supported network_info and node_info parameters to the device."""
         epid, _ = zigpy.types.uint64_t.deserialize(
             network_info.extended_pan_id.serialize()
         )
@@ -176,14 +185,14 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     async def _move_network_to_channel(
         self, new_channel: int, new_nwk_update_id: int
     ) -> None:
-        """Moves the coordinator to a new channel."""
+        """Move the coordinator to a new channel."""
         scan_bitmask = 1 << (new_channel - 11)
         await self._api._queued_at("SC", scan_bitmask)
 
     async def energy_scan(
         self, channels: zigpy.types.Channels, duration_exp: int, count: int
     ) -> dict[int, float]:
-        """Runs an energy detection scan and returns the per-channel scan results."""
+        """Run an energy detection scan and returns the per-channel scan results."""
         all_results = {}
 
         for _ in range(count):
@@ -240,6 +249,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         return state
 
     async def send_packet(self, packet: zigpy.types.ZigbeePacket) -> None:
+        """Send ZigbeePacket via the device."""
         LOGGER.debug("Sending packet %r", packet)
 
         try:
@@ -306,6 +316,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     def remote_at_command(
         self, nwk, cmd_name, *args, apply_changes=True, encryption=True
     ):
+        """Execute AT command on another XBee module in the network."""
         LOGGER.debug("Remote AT%s command: %s", cmd_name, args)
         options = zigpy.types.uint8_t(0)
         if apply_changes:
@@ -316,6 +327,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         return self._api._remote_at_command(dev.ieee, nwk, options, cmd_name, *args)
 
     async def permit_ncp(self, time_s=60):
+        """Permit join."""
         assert 0 <= time_s <= 254
         await self._api._at_command("NJ", time_s)
         await self._api._at_command("AC")
@@ -337,54 +349,41 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self.permit_with_link_key(node, code, time_s, key_type=1)
 
     def handle_modem_status(self, status):
+        """Handle changed Modem Status of the device."""
         LOGGER.info("Modem status update: %s (%s)", status.name, status.value)
 
     def handle_rx(
         self, src_ieee, src_nwk, src_ep, dst_ep, cluster_id, profile_id, rxopts, data
     ):
-        if src_nwk == 0:
+        """Handle receipt of Zigbee data from the device."""
+        src = zigpy.types.AddrModeAddress(
+            addr_mode=zigpy.types.AddrMode.NWK, address=src_nwk
+        )
+
+        dst = zigpy.types.AddrModeAddress(
+            addr_mode=zigpy.types.AddrMode.NWK, address=self.state.node_info.nwk
+        )
+
+        if src == dst:
             LOGGER.info("handle_rx self addressed")
 
-        ember_ieee = zigpy.types.EUI64(src_ieee)
-        if dst_ep == 0 and cluster_id == zdo_t.ZDOCmd.Device_annce:
-            # ZDO Device announce request
-            nwk, rest = zigpy.types.NWK.deserialize(data[1:])
-            ieee, rest = zigpy.types.EUI64.deserialize(rest)
-            LOGGER.info("New device joined: NWK 0x%04x, IEEE %s", nwk, ieee)
-            if ember_ieee != ieee:
-                LOGGER.warning(
-                    "Announced IEEE %s is different from originator %s",
-                    str(ieee),
-                    str(ember_ieee),
-                )
-            if src_nwk != nwk:
-                LOGGER.warning(
-                    "Announced 0x%04x NWK is different from originator 0x%04x",
-                    nwk,
-                    src_nwk,
-                )
-            self.handle_join(nwk, ieee, 0)
-
         try:
-            self._device.last_seen = time.time()
+            self._device.update_last_seen()
         except KeyError:
             pass
 
-        try:
-            device = self.get_device(nwk=src_nwk)
-        except KeyError:
-            if ember_ieee != UNKNOWN_IEEE and ember_ieee in self.devices:
-                self.handle_join(src_nwk, ember_ieee, 0)
-                device = self.get_device(ieee=ember_ieee)
-            else:
-                LOGGER.debug(
-                    "Received frame from unknown device: 0x%04x/%s",
-                    src_nwk,
-                    str(ember_ieee),
-                )
-                return
-
-        self.handle_message(device, profile_id, cluster_id, src_ep, dst_ep, data)
+        self.packet_received(
+            zigpy.types.ZigbeePacket(
+                src=src,
+                src_ep=src_ep,
+                dst=dst,
+                dst_ep=dst_ep,
+                tsn=None,
+                profile_id=profile_id,
+                cluster_id=cluster_id,
+                data=zigpy.types.SerializableBytes(data),
+            )
+        )
 
     def neighbors_updated(
         self, ieee: zigpy.types.EUI64, neighbors: list[zdo_t.Neighbor]
@@ -427,10 +426,16 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
 
 class XBeeCoordinator(zigpy.quirks.CustomDevice):
+    """Zigpy Device representing Coordinator."""
+
     class XBeeGroup(zigpy.quirks.CustomCluster, Groups):
+        """XBeeGroup custom cluster."""
+
         cluster_id = 0x0006
 
     class XBeeGroupResponse(zigpy.quirks.CustomCluster, Groups):
+        """XBeeGroupResponse custom cluster."""
+
         cluster_id = 0x8006
         ep_attribute = "xbee_groups_response"
 
@@ -444,6 +449,8 @@ class XBeeCoordinator(zigpy.quirks.CustomDevice):
         }
 
     def __init__(self, *args, **kwargs):
+        """Initialize instance."""
+
         super().__init__(*args, **kwargs)
         self.node_desc = zdo_t.NodeDescriptor(
             logical_type=zdo_t.LogicalType.Coordinator,

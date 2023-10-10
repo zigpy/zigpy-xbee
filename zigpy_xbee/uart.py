@@ -1,3 +1,5 @@
+"""Module for UART communication to the device."""
+
 import asyncio
 import logging
 from typing import Any, Dict
@@ -10,6 +12,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Gateway(asyncio.Protocol):
+    """Class implementing the UART protocol."""
+
     START = b"\x7E"
     ESCAPE = b"\x7D"
     XON = b"\x11"
@@ -19,13 +23,14 @@ class Gateway(asyncio.Protocol):
     THIS_ONE = True
 
     def __init__(self, api, connected_future=None):
+        """Initialize instance."""
         self._buffer = b""
         self._connected_future = connected_future
         self._api = api
         self._in_command_mode = False
 
     def send(self, data):
-        """Send data, taking care of escaping and framing"""
+        """Send data, taking care of escaping and framing."""
         LOGGER.debug("Sending: %s", data)
         checksum = bytes([self._checksum(data)])
         frame = self.START + self._escape(
@@ -63,14 +68,14 @@ class Gateway(asyncio.Protocol):
         self._api.connection_lost(exc)
 
     def connection_made(self, transport):
-        """Callback when the uart is connected"""
+        """Handle UART connection callback."""
         LOGGER.debug("Connection made")
         self._transport = transport
         if self._connected_future:
             self._connected_future.set_result(True)
 
     def command_mode_rsp(self, data):
-        """Handles AT command mode response."""
+        """Handle AT command mode response."""
         data = data.decode("ascii", "ignore")
         LOGGER.debug("Handling AT command mode response: %s", data)
         self._api.handle_command_mode_rsp(data)
@@ -82,7 +87,7 @@ class Gateway(asyncio.Protocol):
         self._transport.write(data)
 
     def data_received(self, data):
-        """Callback when there is data received from the uart"""
+        """Handle data received from the UART callback."""
         self._buffer += data
         while self._buffer:
             frame = self._extract_frame()
@@ -94,15 +99,16 @@ class Gateway(asyncio.Protocol):
             self.command_mode_rsp(rsp)
 
     def frame_received(self, frame):
-        """Frame receive handler"""
+        """Frame receive handler."""
         LOGGER.debug("Frame received: %s", frame)
         self._api.frame_received(frame)
 
     def close(self):
+        """Close the connection."""
         self._transport.close()
 
     def reset_command_mode(self):
-        """Reset command mode and ignore \r character as command mode response."""
+        r"""Reset command mode and ignore '\r' character as command mode response."""
         self._in_command_mode = False
 
     def _extract_frame(self):
@@ -162,6 +168,7 @@ class Gateway(asyncio.Protocol):
 
 
 async def connect(device_config: Dict[str, Any], api, loop=None) -> Gateway:
+    """Connect to the device."""
     if loop is None:
         loop = asyncio.get_event_loop()
 
