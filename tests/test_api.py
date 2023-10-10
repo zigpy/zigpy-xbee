@@ -453,7 +453,7 @@ def test_handle_tx_status_duplicate(api):
 
 
 def test_handle_registration_status(api):
-    """Test receiving network registration status."""
+    """Test device registration status."""
     frame_id = 0x12
     status = xbee_t.RegistrationStatus.SUCCESS
     fut = asyncio.Future()
