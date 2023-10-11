@@ -161,7 +161,7 @@ class DiscoveryStatus(t.uint8_t, UndefinedEnum):
 
 
 class TXOptions(t.bitmap8):
-    """TX Options for eplicit transmit frame."""
+    """TX Options for explicit transmit frame."""
 
     NONE = 0x00
 

@@ -57,7 +57,7 @@ def test_commands():
 
     for cmd_name, cmd_opts in commands.items():
         assert isinstance(cmd_name, str) is True
-        assert all([c in anum for c in cmd_name]), cmd_name
+        assert all(c in anum for c in cmd_name), cmd_name
         assert len(cmd_opts) == 3
         cmd_id, schema, reply = cmd_opts
         assert isinstance(cmd_id, int) is True
