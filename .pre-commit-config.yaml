@@ -1,17 +1,17 @@
 repos:
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.3.1
+    rev: v3.15.0
     hooks:
       - id: pyupgrade
         args: [--py38-plus]
 
   - repo: https://github.com/PyCQA/autoflake
-    rev: v2.0.2
+    rev: v2.2.1
     hooks:
       - id: autoflake
 
   - repo: https://github.com/psf/black
-    rev: 23.3.0
+    rev: 23.9.1
     hooks:
       - id: black
         args:
@@ -19,19 +19,20 @@ repos:
           - --safe
 
   - repo: https://github.com/PyCQA/flake8
-    rev: 6.0.0
+    rev: 6.1.0
     hooks:
       - id: flake8
         additional_dependencies:
-          - flake8-docstrings==1.5.0
-          - pydocstyle==5.1.1
+          - flake8-docstrings==1.7.0
+          - pydocstyle==6.3.0
           - Flake8-pyproject==1.2.3
-          - flake8-bugbear==23.1.20
-          - flake8-comprehensions==3.10.1
-          - flake8_2020==1.7.0
+          - flake8-bugbear==23.9.16
+          - flake8-comprehensions==3.14.0
+          - flake8_2020==1.8.1
           - mccabe==0.7.0
-          - pycodestyle==2.10.0
-          - pyflakes==3.0.1
+          - pycodestyle==2.11.0
+          - pyflakes==3.1.0
+          - flake8-async==22.11.14
 
   - repo: https://github.com/PyCQA/isort
     rev: 5.12.0
@@ -39,7 +40,7 @@ repos:
       - id: isort
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.2.4
+    rev: v2.2.6
     hooks:
       - id: codespell
         args:
@@ -48,14 +49,14 @@ repos:
           - --quiet-level=2
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.3.0
+    rev: v1.6.0
     hooks:
       - id: mypy
         additional_dependencies:
           - zigpy
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.0.261
+    rev: v0.0.291
     hooks:
       - id: ruff
         args:
