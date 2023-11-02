@@ -113,23 +113,21 @@ def _test_rx(
 def test_rx(app):
     """Test message receiving."""
     device = mock.MagicMock()
-    app.handle_message = mock.MagicMock()
     _test_rx(app, device, 0x1234, data=b"\x01\x02\x03\x04")
-    app.handle_message.assert_called_once_with(
-        sender=device,
-        profile=mock.sentinel.profile_id,
-        cluster=mock.sentinel.cluster_id,
-        src_ep=mock.sentinel.src_ep,
-        dst_ep=mock.sentinel.dst_ep,
-        message=b"\x01\x02\x03\x04",
-        dst_addressing=t.AddrMode.NWK,
-    )
+    assert device.packet_received.call_count == 1
+    packet = device.packet_received.call_args[0][0]
+    assert packet.src == t.AddrModeAddress(addr_mode=t.AddrMode.NWK, address=0x1234)
+    assert packet.src_ep == mock.sentinel.src_ep
+    assert packet.dst == t.AddrModeAddress(addr_mode=t.AddrMode.NWK, address=0x0000)
+    assert packet.dst_ep == mock.sentinel.dst_ep
+    assert packet.profile_id == mock.sentinel.profile_id
+    assert packet.cluster_id == mock.sentinel.cluster_id
+    assert packet.data == t.SerializableBytes(b"\x01\x02\x03\x04")
 
 
 def test_rx_nwk_0000(app):
     """Test receiving self-addressed message."""
     app._handle_reply = mock.MagicMock()
-    app.handle_message = mock.MagicMock()
     app.get_device = mock.MagicMock()
     app.handle_rx(
         b"\x01\x02\x03\x04\x05\x06\x07\x08",
@@ -141,13 +139,11 @@ def test_rx_nwk_0000(app):
         mock.sentinel.rxopts,
         b"",
     )
-    assert app.handle_message.call_count == 1
     assert app.get_device.call_count == 2
 
 
 def test_rx_unknown_device(app, device):
     """Unknown NWK, but existing device."""
-    app.handle_message = mock.MagicMock()
     app.create_task = mock.MagicMock()
     app._discover_unknown_device = mock.MagicMock()
     dev = device(nwk=0x1234)
@@ -166,13 +162,11 @@ def test_rx_unknown_device(app, device):
     )
     assert app.create_task.call_count == 1
     app._discover_unknown_device.assert_called_once_with(0x3334)
-    assert app.handle_message.call_count == 0
     assert len(app.devices) == num_before_rx
 
 
 def test_rx_unknown_device_ieee(app):
     """Unknown NWK, and unknown IEEE."""
-    app.handle_message = mock.MagicMock()
     app.create_task = mock.MagicMock()
     app._discover_unknown_device = mock.MagicMock()
     app.get_device = mock.MagicMock(side_effect=KeyError)
@@ -189,7 +183,6 @@ def test_rx_unknown_device_ieee(app):
     assert app.create_task.call_count == 1
     app._discover_unknown_device.assert_called_once_with(0x3334)
     assert app.get_device.call_count == 2
-    assert app.handle_message.call_count == 0
 
 
 @pytest.fixture
@@ -217,7 +210,8 @@ def device(app):
 
 def _device_join(app, dev, data):
     """Simulate device join notification."""
-    app.handle_message = mock.MagicMock()
+    dev.packet_received = mock.MagicMock()
+    dev.schedule_initialize = mock.MagicMock()
     app.handle_join = mock.MagicMock()
     app.create_task = mock.MagicMock()
     app._discover_unknown_device = mock.MagicMock()
@@ -227,7 +221,8 @@ def _device_join(app, dev, data):
 
     _test_rx(app, dev, dev.nwk, dst_ep, cluster_id, data)
     assert app.handle_join.call_count == 1
-    assert app.handle_message.call_count == 1
+    assert dev.packet_received.call_count == 1
+    assert dev.schedule_initialize.call_count == 1
 
 
 def test_device_join_new(app, device):
@@ -618,7 +613,7 @@ def test_rx_device_annce(app, ieee, nwk):
     device.zdo = zigpy.zdo.ZDO(None)
     app.get_device = mock.MagicMock(return_value=device)
     app.handle_join = mock.MagicMock()
-    app.handle_message = mock.MagicMock()
+    device.packet_received = mock.MagicMock()
 
     data = t.uint8_t(0xAA).serialize()
     data += nwk.serialize()
@@ -636,7 +631,7 @@ def test_rx_device_annce(app, ieee, nwk):
         data,
     )
 
-    assert app.handle_message.call_count == 1
+    assert device.packet_received.call_count == 1
     app.handle_join.assert_called_once_with(nwk=nwk, ieee=ieee, parent_nwk=None)
 
 
