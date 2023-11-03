@@ -709,7 +709,7 @@ async def test_energy_scan(app):
     energy = await app.energy_scan(
         channels=list(range(11, 27)), duration_exp=time_s, count=count
     )
-    assert app._api._at_command.mock_calls == [mock.call("ED", time_s)] * count
+    assert app._api._at_command.mock_calls == [mock.call("ED", bytes([time_s]))] * count
     assert {k: round(v, 3) for k, v in energy.items()} == {
         11: 254.032,
         12: 253.153,
