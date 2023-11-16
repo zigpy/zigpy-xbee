@@ -5,12 +5,15 @@ from unittest import mock
 
 import pytest
 import serial_asyncio
+import zigpy.config
 
 from zigpy_xbee import uart
-import zigpy_xbee.config
 
-DEVICE_CONFIG = zigpy_xbee.config.SCHEMA_DEVICE(
-    {zigpy_xbee.config.CONF_DEVICE_PATH: "/dev/null"}
+DEVICE_CONFIG = zigpy.config.SCHEMA_DEVICE(
+    {
+        zigpy.config.CONF_DEVICE_PATH: "/dev/null",
+        zigpy.config.CONF_DEVICE_BAUDRATE: 57600,
+    }
 )
 
 

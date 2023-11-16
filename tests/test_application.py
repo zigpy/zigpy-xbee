@@ -3,6 +3,7 @@
 import asyncio
 
 import pytest
+import zigpy.config as config
 import zigpy.exceptions
 import zigpy.state
 import zigpy.types as t
@@ -10,7 +11,6 @@ import zigpy.zdo
 import zigpy.zdo.types as zdo_t
 
 from zigpy_xbee.api import XBee
-import zigpy_xbee.config as config
 from zigpy_xbee.exceptions import InvalidCommand
 import zigpy_xbee.types as xbee_t
 from zigpy_xbee.zigbee import application

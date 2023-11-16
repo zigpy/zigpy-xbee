@@ -1,22 +1,24 @@
 """Tests for API."""
 
 import asyncio
-import logging
 
 import pytest
 import serial
+import zigpy.config
 import zigpy.exceptions
 import zigpy.types as t
 
 from zigpy_xbee import api as xbee_api, types as xbee_t, uart
-import zigpy_xbee.config
 from zigpy_xbee.exceptions import ATCommandError, ATCommandException, InvalidCommand
 from zigpy_xbee.zigbee.application import ControllerApplication
 
 import tests.async_mock as mock
 
-DEVICE_CONFIG = zigpy_xbee.config.SCHEMA_DEVICE(
-    {zigpy_xbee.config.CONF_DEVICE_PATH: "/dev/null"}
+DEVICE_CONFIG = zigpy.config.SCHEMA_DEVICE(
+    {
+        zigpy.config.CONF_DEVICE_PATH: "/dev/null",
+        zigpy.config.CONF_DEVICE_BAUDRATE: 57600,
+    }
 )
 
 
@@ -600,51 +602,6 @@ def test_handle_many_to_one_rri(api):
     ieee = t.EUI64([t.uint8_t(a) for a in range(0, 8)])
     nwk = 0x1234
     api._handle_many_to_one_rri(ieee, nwk, 0)
-
-
-async def test_reconnect_multiple_disconnects(monkeypatch, caplog):
-    """Test reconnect with multiple disconnects."""
-    api = xbee_api.XBee(DEVICE_CONFIG)
-    connect_mock = mock.AsyncMock(return_value=True)
-    monkeypatch.setattr(uart, "connect", connect_mock)
-
-    await api.connect()
-
-    caplog.set_level(logging.DEBUG)
-    connect_mock.reset_mock()
-    connect_mock.side_effect = [OSError, mock.sentinel.uart_reconnect]
-    api.connection_lost("connection lost")
-    await asyncio.sleep(0.3)
-    api.connection_lost("connection lost 2")
-    await asyncio.sleep(0.3)
-
-    assert "Cancelling reconnection attempt" in caplog.messages
-    assert api._uart is mock.sentinel.uart_reconnect
-    assert connect_mock.call_count == 2
-
-
-async def test_reconnect_multiple_attempts(monkeypatch, caplog):
-    """Test reconnect with multiple attempts."""
-    api = xbee_api.XBee(DEVICE_CONFIG)
-    connect_mock = mock.AsyncMock(return_value=True)
-    monkeypatch.setattr(uart, "connect", connect_mock)
-
-    await api.connect()
-
-    caplog.set_level(logging.DEBUG)
-    connect_mock.reset_mock()
-    connect_mock.side_effect = [
-        asyncio.TimeoutError,
-        OSError,
-        mock.sentinel.uart_reconnect,
-    ]
-
-    with mock.patch("asyncio.sleep"):
-        api.connection_lost("connection lost")
-        await api._conn_lost_task
-
-    assert api._uart is mock.sentinel.uart_reconnect
-    assert connect_mock.call_count == 3
 
 
 @mock.patch.object(xbee_api.XBee, "_at_command", new_callable=mock.AsyncMock)

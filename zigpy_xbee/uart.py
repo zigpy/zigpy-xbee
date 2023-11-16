@@ -4,9 +4,8 @@ import asyncio
 import logging
 from typing import Any, Dict
 
+import zigpy.config
 import zigpy.serial
-
-from zigpy_xbee.config import CONF_DEVICE_BAUDRATE, CONF_DEVICE_PATH
 
 LOGGER = logging.getLogger(__name__)
 
@@ -178,8 +177,8 @@ async def connect(device_config: Dict[str, Any], api, loop=None) -> Gateway:
     transport, protocol = await zigpy.serial.create_serial_connection(
         loop,
         lambda: protocol,
-        url=device_config[CONF_DEVICE_PATH],
-        baudrate=device_config[CONF_DEVICE_BAUDRATE],
+        url=device_config[zigpy.config.CONF_DEVICE_PATH],
+        baudrate=device_config[zigpy.config.CONF_DEVICE_BAUDRATE],
         xonxoff=False,
     )
 
