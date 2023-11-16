@@ -23,6 +23,7 @@ import zigpy.zdo.types as zdo_t
 import zigpy_xbee
 import zigpy_xbee.api
 from zigpy_xbee.config import CONF_DEVICE, CONFIG_SCHEMA, SCHEMA_DEVICE
+from zigpy_xbee.exceptions import InvalidCommand
 from zigpy_xbee.types import EUI64, UNKNOWN_IEEE, UNKNOWN_NWK, TXOptions, TXStatus
 
 # how long coordinator would hold message for an end device in 10ms units
@@ -131,7 +132,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 node_info.logical_type = zdo_t.LogicalType.Coordinator
             else:
                 node_info.logical_type = zdo_t.LogicalType.EndDevice
-        except RuntimeError:
+        except InvalidCommand:
             LOGGER.warning("CE command failed, assuming node is coordinator")
             node_info.logical_type = zdo_t.LogicalType.Coordinator
 
@@ -171,7 +172,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         try:
             await self._api._queued_at("CE", 1)
-        except RuntimeError:
+        except InvalidCommand:
             pass
 
         await self._api._at_command("WR")

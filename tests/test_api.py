@@ -10,6 +10,7 @@ import zigpy.types as t
 
 from zigpy_xbee import api as xbee_api, types as xbee_t, uart
 import zigpy_xbee.config
+from zigpy_xbee.exceptions import ATCommandError, ATCommandException, InvalidCommand
 from zigpy_xbee.zigbee.application import ControllerApplication
 
 import tests.async_mock as mock
@@ -327,7 +328,16 @@ def test_handle_at_response_error(api):
     status, response = 1, 0x23
     fut = _handle_at_response(api, tsn, status, [response])
     assert fut.done() is True
-    assert fut.exception() is not None
+    assert isinstance(fut.exception(), ATCommandError)
+
+
+def test_handle_at_response_invalid_command(api):
+    """Test invalid AT command response."""
+    tsn = 123
+    status, response = 2, 0x23
+    fut = _handle_at_response(api, tsn, status, [response])
+    assert fut.done() is True
+    assert isinstance(fut.exception(), InvalidCommand)
 
 
 def test_handle_at_response_undef_error(api):
@@ -336,7 +346,7 @@ def test_handle_at_response_undef_error(api):
     status, response = 0xEE, 0x23
     fut = _handle_at_response(api, tsn, status, [response])
     assert fut.done() is True
-    assert fut.exception() is not None
+    assert isinstance(fut.exception(), ATCommandException)
 
 
 def test_handle_remote_at_rsp(api):

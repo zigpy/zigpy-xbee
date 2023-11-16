@@ -11,6 +11,7 @@ import zigpy.zdo.types as zdo_t
 
 from zigpy_xbee.api import XBee
 import zigpy_xbee.config as config
+from zigpy_xbee.exceptions import InvalidCommand
 import zigpy_xbee.types as xbee_t
 from zigpy_xbee.zigbee import application
 
@@ -305,7 +306,7 @@ async def test_write_network_info(app, node_info, network_info, legacy_module):
 
     def _mock_queued_at(name, *args):
         if legacy_module and name == "CE":
-            raise RuntimeError("Legacy module")
+            raise InvalidCommand("Legacy module")
         return "OK"
 
     app._api._queued_at = mock.AsyncMock(
@@ -346,7 +347,7 @@ async def _test_start_network(
         if not api_mode:
             raise asyncio.TimeoutError
         if cmd == "CE" and legacy_module:
-            raise RuntimeError
+            raise InvalidCommand
 
         ai_tries -= 1 if cmd == "AI" else 0
         return {

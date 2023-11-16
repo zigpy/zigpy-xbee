@@ -2,7 +2,6 @@
 
 import asyncio
 import binascii
-import enum
 import functools
 import logging
 from typing import Any, Dict, Optional
@@ -13,6 +12,13 @@ import zigpy.types as t
 
 import zigpy_xbee
 from zigpy_xbee.config import CONF_DEVICE_BAUDRATE, CONF_DEVICE_PATH, SCHEMA_DEVICE
+from zigpy_xbee.exceptions import (
+    ATCommandError,
+    ATCommandException,
+    InvalidCommand,
+    InvalidParameter,
+    TransmissionFailure,
+)
 
 from . import types as xbee_t, uart
 
@@ -261,14 +267,12 @@ BAUDRATE_TO_BD = {
 }
 
 
-class ATCommandResult(enum.IntEnum):
-    """AT Command Result."""
-
-    OK = 0
-    ERROR = 1
-    INVALID_COMMAND = 2
-    INVALID_PARAMETER = 3
-    TX_FAILURE = 4
+AT_COMMAND_RESULT = {
+    1: ATCommandError,
+    2: InvalidCommand,
+    3: InvalidParameter,
+    4: TransmissionFailure,
+}
 
 
 class XBee:
@@ -444,13 +448,13 @@ class XBee:
     def _handle_at_response(self, frame_id, cmd, status, value):
         """Local AT command response."""
         (fut,) = self._awaiting.pop(frame_id)
-        try:
-            status = ATCommandResult(status)
-        except ValueError:
-            status = ATCommandResult.ERROR
 
         if status:
-            fut.set_exception(RuntimeError(f"AT Command response: {status.name}"))
+            try:
+                exception = AT_COMMAND_RESULT[status]
+            except KeyError:
+                exception = ATCommandException
+            fut.set_exception(exception(f"AT Command response: {status}"))
             return
 
         response_type = AT_COMMANDS[cmd.decode("ascii")]
