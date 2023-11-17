@@ -734,7 +734,7 @@ async def test_energy_scan(app):
 async def test_energy_scan_legacy_module(app):
     """Test channel energy scan."""
     app._api._at_command = mock.AsyncMock(
-        spec=XBee._at_command, side_effect=RuntimeError
+        spec=XBee._at_command, side_effect=InvalidCommand
     )
     time_s = 3
     count = 3

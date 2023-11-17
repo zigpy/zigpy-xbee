@@ -199,7 +199,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         for _ in range(count):
             try:
                 results = await self._api._at_command("ED", bytes([duration_exp]))
-            except RuntimeError:
+            except InvalidCommand:
                 LOGGER.warning("Coordinator does not support energy scanning")
                 return {c: 0 for c in channels}
 
