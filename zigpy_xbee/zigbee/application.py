@@ -23,6 +23,7 @@ import zigpy.zdo.types as zdo_t
 
 import zigpy_xbee
 import zigpy_xbee.api
+import zigpy_xbee.config
 from zigpy_xbee.exceptions import InvalidCommand
 from zigpy_xbee.types import EUI64, UNKNOWN_IEEE, UNKNOWN_NWK, TXOptions, TXStatus
 
@@ -41,6 +42,8 @@ XBEE_ENDPOINT_ID = 0xE6
 
 class ControllerApplication(zigpy.application.ControllerApplication):
     """Implementation of Zigpy ControllerApplication for XBee devices."""
+
+    CONFIG_SCHEMA = zigpy_xbee.config.CONFIG_SCHEMA
 
     def __init__(self, config: dict[str, Any]):
         """Initialize instance."""
