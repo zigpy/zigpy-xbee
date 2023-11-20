@@ -363,6 +363,7 @@ async def _test_start_network(
             "SH": 0x08070605,
             "SL": 0x04030201,
             "ZS": zs,
+            "VR": 0x1234,
         }.get(cmd, None)
 
     def init_api_mode_mock():
@@ -439,20 +440,6 @@ async def test_permit(app):
     await app.permit_ncp(time_s)
     assert app._api._at_command.call_count == 2
     assert app._api._at_command.call_args_list[0][0][1] == time_s
-
-
-async def test_permit_with_key(app):
-    """Test permit joins with join code."""
-    app._api._command = mock.AsyncMock(return_value=xbee_t.TXStatus.SUCCESS)
-    app._api._at_command = mock.AsyncMock(return_value="OK")
-    node = t.EUI64(b"\x01\x02\x03\x04\x05\x06\x07\x08")
-    code = b"\xC9\xA7\xD2\x44\x1A\x71\x16\x95\xCD\x62\x17\x0D\x33\x28\xEA\x2B\x42\x3D"
-    time_s = 500
-    await app.permit_with_key(node=node, code=code, time_s=time_s)
-    app._api._at_command.assert_called_once_with("KT", time_s)
-    app._api._command.assert_called_once_with(
-        "register_joining_device", node, 0xFFFE, 1, code
-    )
 
 
 async def test_permit_with_link_key(app):

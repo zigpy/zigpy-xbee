@@ -40,13 +40,8 @@ async def test_connect(monkeypatch):
 def test_close(api):
     """Test connection close."""
     uart = api._uart
-    conn_lost_task = mock.MagicMock()
-    api._conn_lost_task = conn_lost_task
-
     api.close()
 
-    assert api._conn_lost_task is None
-    assert conn_lost_task.cancel.call_count == 1
     assert api._uart is None
     assert uart.close.call_count == 1
 
