@@ -868,7 +868,7 @@ async def test_routes_updated(app, device):
     app._api._at_command.assert_awaited_once_with("DB")
 
 
-async def test_watchdog(self):
+async def test_watchdog(app):
     """Test watchdog feed method."""
     app._api._at_command = mock.AsyncMock(return_value="OK")
     await app._watchdog_feed()
