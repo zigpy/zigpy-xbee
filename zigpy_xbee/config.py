@@ -1,19 +1,12 @@
 """XBee module config."""
 
 import voluptuous as vol
-from zigpy.config import (  # noqa: F401 pylint: disable=unused-import
-    CONF_DATABASE,
-    CONF_DEVICE,
-    CONF_DEVICE_PATH,
-    CONFIG_SCHEMA,
-    SCHEMA_DEVICE,
-    cv_boolean,
+import zigpy.config
+
+SCHEMA_DEVICE = zigpy.config.SCHEMA_DEVICE.extend(
+    {vol.Optional(zigpy.config.CONF_DEVICE_BAUDRATE, default=57600): int}
 )
 
-CONF_DEVICE_BAUDRATE = "baudrate"
-
-SCHEMA_DEVICE = SCHEMA_DEVICE.extend(
-    {vol.Optional(CONF_DEVICE_BAUDRATE, default=57600): int}
+CONFIG_SCHEMA = zigpy.config.CONFIG_SCHEMA.extend(
+    {vol.Required(zigpy.config.CONF_DEVICE): zigpy.config.SCHEMA_DEVICE}
 )
-
-CONFIG_SCHEMA = CONFIG_SCHEMA.extend({vol.Required(CONF_DEVICE): SCHEMA_DEVICE})

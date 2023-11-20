@@ -10,6 +10,7 @@ from typing import Any
 
 import zigpy.application
 import zigpy.config
+from zigpy.config import CONF_DEVICE
 import zigpy.device
 import zigpy.exceptions
 import zigpy.quirks
@@ -22,7 +23,7 @@ import zigpy.zdo.types as zdo_t
 
 import zigpy_xbee
 import zigpy_xbee.api
-from zigpy_xbee.config import CONF_DEVICE, CONFIG_SCHEMA, SCHEMA_DEVICE
+import zigpy_xbee.config
 from zigpy_xbee.exceptions import InvalidCommand
 from zigpy_xbee.types import EUI64, UNKNOWN_IEEE, UNKNOWN_NWK, TXOptions, TXStatus
 
@@ -42,16 +43,16 @@ XBEE_ENDPOINT_ID = 0xE6
 class ControllerApplication(zigpy.application.ControllerApplication):
     """Implementation of Zigpy ControllerApplication for XBee devices."""
 
-    SCHEMA = CONFIG_SCHEMA
-    SCHEMA_DEVICE = SCHEMA_DEVICE
-
-    probe = zigpy_xbee.api.XBee.probe
+    CONFIG_SCHEMA = zigpy_xbee.config.CONFIG_SCHEMA
 
     def __init__(self, config: dict[str, Any]):
         """Initialize instance."""
         super().__init__(config=zigpy.config.ZIGPY_SCHEMA(config))
         self._api: zigpy_xbee.api.XBee | None = None
         self.topology.add_listener(self)
+
+    async def _watchdog_feed(self):
+        await self._api._at_command("VR")
 
     async def disconnect(self):
         """Shutdown application."""
@@ -135,6 +136,13 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         except InvalidCommand:
             LOGGER.warning("CE command failed, assuming node is coordinator")
             node_info.logical_type = zdo_t.LogicalType.Coordinator
+
+        # TODO: Feature detect the XBee's exact model
+        node_info.model = "XBee"
+        node_info.manufacturer = "Digi"
+
+        version = await self._api._at_command("VR")
+        node_info.version = f"{int(version):#06x}"
 
         # Load network info
         pan_id = await self._api._at_command("OI")
@@ -349,10 +357,6 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         # 0 = Pre-configured Link Key (KY command of the joining device)
         # 1 = Install Code With CRC (I? command of the joining device)
         await self._api.register_joining_device(node, reserved, key_type, link_key)
-
-    async def permit_with_key(self, node: EUI64, code: bytes, time_s=500):
-        """Permits a new device to join with the given IEEE and Install Code."""
-        await self.permit_with_link_key(node, code, time_s, key_type=1)
 
     def handle_modem_status(self, status):
         """Handle changed Modem Status of the device."""

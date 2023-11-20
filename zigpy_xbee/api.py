@@ -7,11 +7,11 @@ import logging
 from typing import Any, Dict, Optional
 
 import serial
+from zigpy.config import CONF_DEVICE_PATH, SCHEMA_DEVICE
 from zigpy.exceptions import APIException, DeliveryError
 import zigpy.types as t
 
 import zigpy_xbee
-from zigpy_xbee.config import CONF_DEVICE_BAUDRATE, CONF_DEVICE_PATH, SCHEMA_DEVICE
 from zigpy_xbee.exceptions import (
     ATCommandError,
     ATCommandException,
@@ -287,7 +287,6 @@ class XBee:
         self._awaiting = {}
         self._app = None
         self._cmd_mode_future: Optional[asyncio.Future] = None
-        self._conn_lost_task: Optional[asyncio.Task] = None
         self._reset: asyncio.Event = asyncio.Event()
         self._running: asyncio.Event = asyncio.Event()
 
@@ -323,64 +322,13 @@ class XBee:
         assert self._uart is None
         self._uart = await uart.connect(self._config, self)
 
-    def reconnect(self):
-        """Reconnect using saved parameters."""
-        LOGGER.debug(
-            "Reconnecting '%s' serial port using %s",
-            self._config[CONF_DEVICE_PATH],
-            self._config[CONF_DEVICE_BAUDRATE],
-        )
-        return self.connect()
-
     def connection_lost(self, exc: Exception) -> None:
         """Lost serial connection."""
-        LOGGER.warning(
-            "Serial '%s' connection lost unexpectedly: %s",
-            self._config[CONF_DEVICE_PATH],
-            exc,
-        )
-        self._uart = None
-        if self._conn_lost_task and not self._conn_lost_task.done():
-            self._conn_lost_task.cancel()
-        self._conn_lost_task = asyncio.create_task(self._connection_lost())
-
-    async def _connection_lost(self) -> None:
-        """Reconnect serial port."""
-        try:
-            await self._reconnect_till_done()
-        except asyncio.CancelledError:
-            LOGGER.debug("Cancelling reconnection attempt")
-            raise
-
-    async def _reconnect_till_done(self) -> None:
-        attempt = 1
-        while True:
-            try:
-                await asyncio.wait_for(self.reconnect(), timeout=10)
-                break
-            except (asyncio.TimeoutError, OSError) as exc:
-                wait = 2 ** min(attempt, 5)
-                attempt += 1
-                LOGGER.debug(
-                    "Couldn't re-open '%s' serial port, retrying in %ss: %s",
-                    self._config[CONF_DEVICE_PATH],
-                    wait,
-                    str(exc),
-                )
-                await asyncio.sleep(wait)
-
-        LOGGER.debug(
-            "Reconnected '%s' serial port after %s attempts",
-            self._config[CONF_DEVICE_PATH],
-            attempt,
-        )
+        if self._app is not None:
+            self._app.connection_lost(exc)
 
     def close(self):
         """Close the connection."""
-        if self._conn_lost_task:
-            self._conn_lost_task.cancel()
-            self._conn_lost_task = None
-
         if self._uart:
             self._uart.close()
             self._uart = None
