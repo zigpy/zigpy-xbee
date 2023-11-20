@@ -731,6 +731,20 @@ async def test_energy_scan(app):
     }
 
 
+async def test_energy_scan_legacy_module(app):
+    """Test channel energy scan."""
+    app._api._at_command = mock.AsyncMock(
+        spec=XBee._at_command, side_effect=InvalidCommand
+    )
+    time_s = 3
+    count = 3
+    energy = await app.energy_scan(
+        channels=list(range(11, 27)), duration_exp=time_s, count=count
+    )
+    app._api._at_command.assert_called_once_with("ED", bytes([time_s]))
+    assert energy == {c: 0 for c in range(11, 27)}
+
+
 def test_neighbors_updated(app, device):
     """Test LQI from neighbour scan."""
     router = device(ieee=b"\x01\x02\x03\x04\x05\x06\x07\x08")

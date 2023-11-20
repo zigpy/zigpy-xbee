@@ -197,7 +197,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         all_results = {}
 
         for _ in range(count):
-            results = await self._api._at_command("ED", bytes([duration_exp]))
+            try:
+                results = await self._api._at_command("ED", bytes([duration_exp]))
+            except InvalidCommand:
+                LOGGER.warning("Coordinator does not support energy scanning")
+                return {c: 0 for c in channels}
+
             results = {
                 channel: -int(rssi) for channel, rssi in zip(range(11, 27), results)
             }
