@@ -679,3 +679,17 @@ async def test_xbee_new(conn_mck):
     assert isinstance(api, xbee_api.XBee)
     assert conn_mck.call_count == 1
     assert conn_mck.await_count == 1
+
+
+@mock.patch.object(xbee_api.XBee, "connect", return_value=mock.MagicMock())
+async def test_connection_lost(conn_mck):
+    """Test `connection_lost` propagataion."""
+    api = await xbee_api.XBee.new(mock.sentinel.application, DEVICE_CONFIG)
+    await api.connect()
+
+    app = api._app = mock.MagicMock()
+
+    err = RuntimeError()
+    api.connection_lost(err)
+
+    app.connection_lost.assert_called_once_with(err)

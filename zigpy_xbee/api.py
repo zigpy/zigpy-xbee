@@ -327,8 +327,6 @@ class XBee:
         if self._app is not None:
             self._app.connection_lost(exc)
 
-        self.close()
-
     def close(self):
         """Close the connection."""
         if self._uart:
