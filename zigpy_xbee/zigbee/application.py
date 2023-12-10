@@ -51,9 +51,6 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self._api: zigpy_xbee.api.XBee | None = None
         self.topology.add_listener(self)
 
-    async def _watchdog_feed(self):
-        await self._api._at_command("VR")
-
     async def disconnect(self):
         """Shutdown application."""
         if self._api:

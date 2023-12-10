@@ -866,11 +866,3 @@ async def test_routes_updated(app, device):
     assert router2.radio_details.call_count == 0
 
     app._api._at_command.assert_awaited_once_with("DB")
-
-
-async def test_watchdog(app):
-    """Test watchdog feed method."""
-    app._api._at_command = mock.AsyncMock(return_value="OK")
-    await app._watchdog_feed()
-
-    assert app._api._at_command.mock_calls == [mock.call("VR")]
