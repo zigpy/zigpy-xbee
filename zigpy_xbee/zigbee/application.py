@@ -302,30 +302,31 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 "Cannot send a packet to a device without a known IEEE address"
             )
 
-        send_req = self._api._command(
-            "tx_explicit",
-            long_addr,
-            short_addr,
-            packet.src_ep or 0,
-            packet.dst_ep or 0,
-            packet.cluster_id,
-            packet.profile_id,
-            packet.radius,
-            tx_opts,
-            packet.data.serialize(),
-        )
-
-        try:
-            v = await asyncio.wait_for(send_req, timeout=TIMEOUT_TX_STATUS)
-        except asyncio.TimeoutError:
-            raise zigpy.exceptions.DeliveryError(
-                "Timeout waiting for ACK", status=TXStatus.NETWORK_ACK_FAILURE
+        async with self._limit_concurrency():
+            send_req = self._api._command(
+                "tx_explicit",
+                long_addr,
+                short_addr,
+                packet.src_ep or 0,
+                packet.dst_ep or 0,
+                packet.cluster_id,
+                packet.profile_id,
+                packet.radius,
+                tx_opts,
+                packet.data.serialize(),
             )
 
-        if v != TXStatus.SUCCESS:
-            raise zigpy.exceptions.DeliveryError(
-                f"Failed to deliver packet: {v!r}", status=v
-            )
+            try:
+                v = await asyncio.wait_for(send_req, timeout=TIMEOUT_TX_STATUS)
+            except asyncio.TimeoutError:
+                raise zigpy.exceptions.DeliveryError(
+                    "Timeout waiting for ACK", status=TXStatus.NETWORK_ACK_FAILURE
+                )
+
+            if v != TXStatus.SUCCESS:
+                raise zigpy.exceptions.DeliveryError(
+                    f"Failed to deliver packet: {v!r}", status=v
+                )
 
     @zigpy.util.retryable_request()
     def remote_at_command(
