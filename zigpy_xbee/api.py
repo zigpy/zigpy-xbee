@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 
 import serial
 from zigpy.config import CONF_DEVICE_PATH, SCHEMA_DEVICE
+from zigpy.datastructures import PriorityLock
 from zigpy.exceptions import APIException, DeliveryError
 import zigpy.types as t
 
@@ -289,7 +290,7 @@ class XBee:
         self._cmd_mode_future: Optional[asyncio.Future] = None
         self._reset: asyncio.Event = asyncio.Event()
         self._running: asyncio.Event = asyncio.Event()
-        self._send_lock = asyncio.Lock()
+        self._send_lock = PriorityLock()
 
     @property
     def reset_event(self):
@@ -334,33 +335,43 @@ class XBee:
             self._uart.close()
             self._uart = None
 
-    def _command(self, name, *args, mask_frame_id=False):
+    def _get_command_priority(self, name: str, *args) -> int:
+        return {
+            "tx_explicit": -1,
+            "remote_at": -1,
+        }.get(name, 0)
+
+    async def _command(self, name, *args, mask_frame_id=False):
         """Send API frame to the device."""
-        LOGGER.debug("Command %s %s", name, args)
         if self._uart is None:
             raise APIException("API is not running")
-        frame_id = 0 if mask_frame_id else self._seq
-        data, needs_response = self._api_frame(name, frame_id, *args)
-        self._uart.send(data)
-        future = None
-        if needs_response and frame_id:
+
+        async with self._send_lock(priority=self._get_command_priority(name)):
+            LOGGER.debug("Command %s %s", name, args)
+            frame_id = 0 if mask_frame_id else self._seq
+            data, needs_response = self._api_frame(name, frame_id, *args)
+            self._uart.send(data)
+
+            if not needs_response or not frame_id:
+                return
+
             future = asyncio.Future()
             self._awaiting[frame_id] = (future,)
-        self._seq = (self._seq % 255) + 1
-        return future
+            self._seq = (self._seq % 255) + 1
+
+            return await future
 
     async def _remote_at_command(self, ieee, nwk, options, name, *args):
         """Execute AT command on a different XBee module in the network."""
         LOGGER.debug("Remote AT command: %s %s", name, args)
         data = t.serialize(args, (AT_COMMANDS[name],))
         try:
-            async with self._send_lock:
-                return await asyncio.wait_for(
-                    self._command(
-                        "remote_at", ieee, nwk, options, name.encode("ascii"), data
-                    ),
-                    timeout=REMOTE_AT_COMMAND_TIMEOUT,
-                )
+            return await asyncio.wait_for(
+                self._command(
+                    "remote_at", ieee, nwk, options, name.encode("ascii"), data
+                ),
+                timeout=REMOTE_AT_COMMAND_TIMEOUT,
+            )
         except asyncio.TimeoutError:
             LOGGER.warning("No response to %s command", name)
             raise
@@ -369,11 +380,10 @@ class XBee:
         LOGGER.debug("%s command: %s %s", cmd_type, name, args)
         data = t.serialize(args, (AT_COMMANDS[name],))
         try:
-            async with self._send_lock:
-                return await asyncio.wait_for(
-                    self._command(cmd_type, name.encode("ascii"), data),
-                    timeout=AT_COMMAND_TIMEOUT,
-                )
+            return await asyncio.wait_for(
+                self._command(cmd_type, name.encode("ascii"), data),
+                timeout=AT_COMMAND_TIMEOUT,
+            )
         except asyncio.TimeoutError:
             LOGGER.warning("%s: No response to %s command", cmd_type, name)
             raise
