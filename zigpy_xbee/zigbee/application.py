@@ -302,7 +302,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 "Cannot send a packet to a device without a known IEEE address"
             )
 
-        send_req = self._api.tx_explicit(
+        send_req = self._api._command(
+            "tx_explicit",
             long_addr,
             short_addr,
             packet.src_ep or 0,
@@ -356,7 +357,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         # Key type:
         # 0 = Pre-configured Link Key (KY command of the joining device)
         # 1 = Install Code With CRC (I? command of the joining device)
-        await self._api.register_joining_device(node, reserved, key_type, link_key)
+        await self._api._command(
+            "register_joining_device", node, reserved, key_type, link_key
+        )
 
     def handle_modem_status(self, status):
         """Handle changed Modem Status of the device."""

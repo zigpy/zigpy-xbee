@@ -289,6 +289,7 @@ class XBee:
         self._cmd_mode_future: Optional[asyncio.Future] = None
         self._reset: asyncio.Event = asyncio.Event()
         self._running: asyncio.Event = asyncio.Event()
+        self._send_lock = asyncio.Lock()
 
     @property
     def reset_event(self):
@@ -353,12 +354,13 @@ class XBee:
         LOGGER.debug("Remote AT command: %s %s", name, args)
         data = t.serialize(args, (AT_COMMANDS[name],))
         try:
-            return await asyncio.wait_for(
-                self._command(
-                    "remote_at", ieee, nwk, options, name.encode("ascii"), data
-                ),
-                timeout=REMOTE_AT_COMMAND_TIMEOUT,
-            )
+            async with self._send_lock:
+                return await asyncio.wait_for(
+                    self._command(
+                        "remote_at", ieee, nwk, options, name.encode("ascii"), data
+                    ),
+                    timeout=REMOTE_AT_COMMAND_TIMEOUT,
+                )
         except asyncio.TimeoutError:
             LOGGER.warning("No response to %s command", name)
             raise
@@ -367,10 +369,11 @@ class XBee:
         LOGGER.debug("%s command: %s %s", cmd_type, name, args)
         data = t.serialize(args, (AT_COMMANDS[name],))
         try:
-            return await asyncio.wait_for(
-                self._command(cmd_type, name.encode("ascii"), data),
-                timeout=AT_COMMAND_TIMEOUT,
-            )
+            async with self._send_lock:
+                return await asyncio.wait_for(
+                    self._command(cmd_type, name.encode("ascii"), data),
+                    timeout=AT_COMMAND_TIMEOUT,
+                )
         except asyncio.TimeoutError:
             LOGGER.warning("%s: No response to %s command", cmd_type, name)
             raise
@@ -597,9 +600,3 @@ class XBee:
                 raise APIException("Failed to configure XBee for API mode")
         finally:
             self.close()
-
-    def __getattr__(self, item):
-        """Handle supported command requests."""
-        if item in COMMAND_REQUESTS:
-            return functools.partial(self._command, item)
-        raise AttributeError(f"Unknown command {item}")
