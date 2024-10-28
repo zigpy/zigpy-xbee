@@ -10,7 +10,7 @@ import zigpy.serial
 LOGGER = logging.getLogger(__name__)
 
 
-class Gateway(asyncio.Protocol):
+class Gateway(zigpy.serial.SerialProtocol):
     """Class implementing the UART protocol."""
 
     START = b"\x7E"
@@ -21,10 +21,9 @@ class Gateway(asyncio.Protocol):
     RESERVED = START + ESCAPE + XON + XOFF
     THIS_ONE = True
 
-    def __init__(self, api, connected_future=None):
+    def __init__(self, api):
         """Initialize instance."""
-        self._buffer = b""
-        self._connected_future = connected_future
+        super().__init__()
         self._api = api
         self._in_command_mode = False
 
@@ -54,24 +53,10 @@ class Gateway(asyncio.Protocol):
 
     def connection_lost(self, exc) -> None:
         """Port was closed expectedly or unexpectedly."""
-        if self._connected_future and not self._connected_future.done():
-            if exc is None:
-                self._connected_future.set_result(True)
-            else:
-                self._connected_future.set_exception(exc)
-        if exc is None:
-            LOGGER.debug("Closed serial connection")
-            return
+        super().connection_lost(exc)
 
-        LOGGER.error("Lost serial connection: %s", exc)
-        self._api.connection_lost(exc)
-
-    def connection_made(self, transport):
-        """Handle UART connection callback."""
-        LOGGER.debug("Connection made")
-        self._transport = transport
-        if self._connected_future:
-            self._connected_future.set_result(True)
+        if self._api is not None:
+            self._api.connection_lost(exc)
 
     def command_mode_rsp(self, data):
         """Handle AT command mode response."""
@@ -87,24 +72,21 @@ class Gateway(asyncio.Protocol):
 
     def data_received(self, data):
         """Handle data received from the UART callback."""
-        self._buffer += data
+        super().data_received(data)
         while self._buffer:
             frame = self._extract_frame()
             if frame is None:
                 break
             self.frame_received(frame)
         if self._in_command_mode and self._buffer[-1:] == b"\r":
-            rsp, self._buffer = (self._buffer[:-1], b"")
+            rsp = self._buffer[:-1]
+            self._buffer.clear()
             self.command_mode_rsp(rsp)
 
     def frame_received(self, frame):
         """Frame receive handler."""
         LOGGER.debug("Frame received: %s", frame)
         self._api.frame_received(frame)
-
-    def close(self):
-        """Close the connection."""
-        self._transport.close()
 
     def reset_command_mode(self):
         r"""Reset command mode and ignore '\r' character as command mode response."""
@@ -166,22 +148,16 @@ class Gateway(asyncio.Protocol):
         return 0xFF - (sum(data) % 0x100)
 
 
-async def connect(device_config: Dict[str, Any], api, loop=None) -> Gateway:
+async def connect(device_config: Dict[str, Any], api) -> Gateway:
     """Connect to the device."""
-    if loop is None:
-        loop = asyncio.get_event_loop()
-
-    connected_future = asyncio.Future()
-    protocol = Gateway(api, connected_future)
-
     transport, protocol = await zigpy.serial.create_serial_connection(
-        loop,
-        lambda: protocol,
+        loop=asyncio.get_running_loop(),
+        protocol_factory=lambda: Gateway(api),
         url=device_config[zigpy.config.CONF_DEVICE_PATH],
         baudrate=device_config[zigpy.config.CONF_DEVICE_BAUDRATE],
-        xonxoff=False,
+        xonxoff=device_config[zigpy.config.CONF_DEVICE_BAUDRATE],
     )
 
-    await connected_future
+    await protocol.wait_until_connected()
 
     return protocol

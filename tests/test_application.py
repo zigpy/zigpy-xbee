@@ -1,6 +1,7 @@
 """Tests for ControllerApplication."""
 
 import asyncio
+from unittest import mock
 
 import pytest
 import zigpy.config as config
@@ -14,8 +15,6 @@ from zigpy_xbee.api import XBee
 from zigpy_xbee.exceptions import InvalidCommand
 import zigpy_xbee.types as xbee_t
 from zigpy_xbee.zigbee import application
-
-import tests.async_mock as mock
 
 APP_CONFIG = {
     config.CONF_DEVICE: {
@@ -374,13 +373,12 @@ async def _test_start_network(
         api_mode = api_config_succeeds
         return api_config_succeeds
 
-    with mock.patch("zigpy_xbee.api.XBee") as XBee_mock:
-        api_mock = mock.MagicMock()
-        api_mock._at_command = mock.AsyncMock(side_effect=_at_command_mock)
-        api_mock.init_api_mode = mock.AsyncMock(side_effect=init_api_mode_mock)
+    api_mock = mock.MagicMock()
+    api_mock._at_command = mock.AsyncMock(side_effect=_at_command_mock)
+    api_mock.init_api_mode = mock.AsyncMock(side_effect=init_api_mode_mock)
+    api_mock.connect = mock.AsyncMock()
 
-        XBee_mock.new = mock.AsyncMock(return_value=api_mock)
-
+    with mock.patch("zigpy_xbee.api.XBee", return_value=api_mock):
         await app.connect()
 
     app.form_network = mock.AsyncMock()
@@ -418,22 +416,16 @@ async def test_start_network(app):
 
 async def test_start_network_no_api_mode(app):
     """Test start network when not in API mode."""
-    await _test_start_network(app, ai_status=0x00, api_mode=False)
-    assert app.state.node_info.nwk == 0x0000
-    assert app.state.node_info.ieee == t.EUI64(range(1, 9))
-    assert app._api.init_api_mode.call_count == 1
-    assert app._api._at_command.call_count >= 16
+    with pytest.raises(asyncio.TimeoutError):
+        await _test_start_network(app, ai_status=0x00, api_mode=False)
 
 
 async def test_start_network_api_mode_config_fails(app):
     """Test start network when not when API config fails."""
-    with pytest.raises(zigpy.exceptions.ControllerException):
+    with pytest.raises(asyncio.TimeoutError):
         await _test_start_network(
             app, ai_status=0x00, api_mode=False, api_config_succeeds=False
         )
-
-    assert app._api.init_api_mode.call_count == 1
-    assert app._api._at_command.call_count == 1
 
 
 async def test_permit(app):
@@ -559,11 +551,11 @@ async def test_force_remove(app):
 
 async def test_shutdown(app):
     """Test application shutdown."""
-    mack_close = mock.MagicMock()
-    app._api.close = mack_close
-    await app.shutdown()
+    mock_disconnect = mock.AsyncMock()
+    app._api.disconnect = mock_disconnect
+    await app.disconnect()
     assert app._api is None
-    assert mack_close.call_count == 1
+    assert mock_disconnect.call_count == 1
 
 
 async def test_remote_at_cmd(app, device):

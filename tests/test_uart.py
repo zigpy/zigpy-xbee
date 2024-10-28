@@ -68,10 +68,12 @@ def test_command_mode_send(gw):
     gw._transport.write.assert_called_once_with(data)
 
 
-def test_close(gw):
+async def test_disconnect(gw):
     """Test closing connection."""
-    gw.close()
-    assert gw._transport.close.call_count == 1
+    transport = gw._transport
+    asyncio.get_running_loop().call_soon(gw.connection_lost, None)
+    await gw.disconnect()
+    assert transport.close.call_count == 1
 
 
 def test_data_received_chunk_frame(gw):
@@ -228,22 +230,12 @@ def test_unescape_underflow(gw):
 
 def test_connection_lost_exc(gw):
     """Test cannection lost callback is called."""
-    gw._connected_future = asyncio.Future()
-
-    gw.connection_lost(ValueError())
-
-    conn_lost = gw._api.connection_lost
-    assert conn_lost.call_count == 1
-    assert isinstance(conn_lost.call_args[0][0], Exception)
-    assert gw._connected_future.done()
-    assert gw._connected_future.exception()
+    err = RuntimeError()
+    gw.connection_lost(err)
+    assert gw._api.connection_lost.mock_calls == [mock.call(err)]
 
 
 def test_connection_closed(gw):
     """Test connection closed."""
-    gw._connected_future = asyncio.Future()
     gw.connection_lost(None)
-
-    assert gw._api.connection_lost.call_count == 0
-    assert gw._connected_future.done()
-    assert gw._connected_future.result() is True
+    assert gw._api.connection_lost.mock_calls == [mock.call(None)]

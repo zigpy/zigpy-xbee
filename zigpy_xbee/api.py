@@ -6,12 +6,9 @@ import functools
 import logging
 from typing import Any, Dict, Optional
 
-import serial
-from zigpy.config import CONF_DEVICE_PATH, SCHEMA_DEVICE
 from zigpy.exceptions import APIException, DeliveryError
 import zigpy.types as t
 
-import zigpy_xbee
 from zigpy_xbee.exceptions import (
     ATCommandError,
     ATCommandException,
@@ -26,7 +23,6 @@ LOGGER = logging.getLogger(__name__)
 
 AT_COMMAND_TIMEOUT = 3
 REMOTE_AT_COMMAND_TIMEOUT = 30
-PROBE_TIMEOUT = 45
 
 
 # https://www.digi.com/resources/documentation/digidocs/PDFs/90000976.pdf
@@ -305,32 +301,31 @@ class XBee:
         """Return true if coordinator is running."""
         return self.coordinator_started_event.is_set()
 
-    @classmethod
-    async def new(
-        cls,
-        application: "zigpy_xbee.zigbee.application.ControllerApplication",
-        config: Dict[str, Any],
-    ) -> "XBee":
-        """Create new instance."""
-        xbee_api = cls(config)
-        await xbee_api.connect()
-        xbee_api.set_application(application)
-        return xbee_api
-
     async def connect(self) -> None:
         """Connect to the device."""
         assert self._uart is None
         self._uart = await uart.connect(self._config, self)
+
+        try:
+            try:
+                # Ensure we have escaped commands
+                await self._at_command("AP", 2)
+            except asyncio.TimeoutError:
+                if not await self.init_api_mode():
+                    raise APIException("Failed to configure XBee for API mode")
+        except Exception:
+            await self.disconnect()
+            raise
 
     def connection_lost(self, exc: Exception) -> None:
         """Lost serial connection."""
         if self._app is not None:
             self._app.connection_lost(exc)
 
-    def close(self):
+    async def disconnect(self):
         """Close the connection."""
         if self._uart:
-            self._uart.close()
+            await self._uart.disconnect()
             self._uart = None
 
     def _command(self, name, *args, mask_frame_id=False):
@@ -567,36 +562,6 @@ class XBee:
             "Configure XBee manually for escaped API mode ATAP2"
         )
         return False
-
-    @classmethod
-    async def probe(cls, device_config: Dict[str, Any]) -> bool:
-        """Probe port for the device presence."""
-        api = cls(SCHEMA_DEVICE(device_config))
-        try:
-            await asyncio.wait_for(api._probe(), timeout=PROBE_TIMEOUT)
-            return True
-        except (asyncio.TimeoutError, serial.SerialException, APIException) as exc:
-            LOGGER.debug(
-                "Unsuccessful radio probe of '%s' port",
-                device_config[CONF_DEVICE_PATH],
-                exc_info=exc,
-            )
-        finally:
-            api.close()
-
-        return False
-
-    async def _probe(self) -> None:
-        """Open port and try sending a command."""
-        await self.connect()
-        try:
-            # Ensure we have escaped commands
-            await self._at_command("AP", 2)
-        except asyncio.TimeoutError:
-            if not await self.init_api_mode():
-                raise APIException("Failed to configure XBee for API mode")
-        finally:
-            self.close()
 
     def __getattr__(self, item):
         """Handle supported command requests."""

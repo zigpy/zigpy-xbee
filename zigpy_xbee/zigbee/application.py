@@ -54,21 +54,16 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     async def disconnect(self):
         """Shutdown application."""
         if self._api:
-            self._api.close()
+            await self._api.disconnect()
             self._api = None
 
     async def connect(self):
         """Connect to the device."""
-        self._api = await zigpy_xbee.api.XBee.new(self, self._config[CONF_DEVICE])
-        try:
-            # Ensure we have escaped commands
-            await self._api._at_command("AP", 2)
-        except asyncio.TimeoutError:
-            LOGGER.debug("No response to API frame. Configure API mode")
-            if not await self._api.init_api_mode():
-                raise zigpy.exceptions.ControllerException(
-                    "Failed to configure XBee API mode."
-                )
+        api = zigpy_xbee.api.XBee(self._config[CONF_DEVICE])
+        await api.connect()
+        api.set_application(self)
+
+        self._api = api
 
     async def start_network(self):
         """Configure the module to work with Zigpy."""

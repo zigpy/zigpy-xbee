@@ -1,18 +1,16 @@
 """Tests for API."""
 
 import asyncio
+from unittest import mock
 
 import pytest
-import serial
 import zigpy.config
 import zigpy.exceptions
 import zigpy.types as t
 
-from zigpy_xbee import api as xbee_api, types as xbee_t, uart
+from zigpy_xbee import api as xbee_api, types as xbee_t
 from zigpy_xbee.exceptions import ATCommandError, ATCommandException, InvalidCommand
 from zigpy_xbee.zigbee.application import ControllerApplication
-
-import tests.async_mock as mock
 
 DEVICE_CONFIG = zigpy.config.SCHEMA_DEVICE(
     {
@@ -26,24 +24,49 @@ DEVICE_CONFIG = zigpy.config.SCHEMA_DEVICE(
 def api():
     """Sample XBee API fixture."""
     api = xbee_api.XBee(DEVICE_CONFIG)
-    api._uart = mock.MagicMock()
+    api._uart = mock.AsyncMock()
     return api
 
 
-async def test_connect(monkeypatch):
+async def test_connect():
     """Test connect."""
     api = xbee_api.XBee(DEVICE_CONFIG)
-    monkeypatch.setattr(uart, "connect", mock.AsyncMock())
-    await api.connect()
+    api._command = mock.AsyncMock(spec=api._command)
+
+    with mock.patch("zigpy_xbee.uart.connect"):
+        await api.connect()
 
 
-def test_close(api):
+async def test_connect_initial_timeout_success():
+    """Test connect, initial command times out."""
+    api = xbee_api.XBee(DEVICE_CONFIG)
+    api._at_command = mock.AsyncMock(side_effect=asyncio.TimeoutError)
+    api.init_api_mode = mock.AsyncMock(return_value=True)
+
+    with mock.patch("zigpy_xbee.uart.connect"):
+        await api.connect()
+
+
+async def test_connect_initial_timeout_failure():
+    """Test connect, initial command times out."""
+    api = xbee_api.XBee(DEVICE_CONFIG)
+    api._at_command = mock.AsyncMock(side_effect=asyncio.TimeoutError)
+    api.init_api_mode = mock.AsyncMock(return_value=False)
+
+    with mock.patch("zigpy_xbee.uart.connect") as mock_connect:
+        with pytest.raises(zigpy.exceptions.APIException):
+            await api.connect()
+
+    assert mock_connect.return_value.disconnect.mock_calls == [mock.call()]
+
+
+async def test_disconnect(api):
     """Test connection close."""
     uart = api._uart
-    api.close()
+    await api.disconnect()
 
     assert api._uart is None
-    assert uart.close.call_count == 1
+    assert uart.disconnect.call_count == 1
 
 
 def test_commands():
@@ -599,97 +622,10 @@ def test_handle_many_to_one_rri(api):
     api._handle_many_to_one_rri(ieee, nwk, 0)
 
 
-@mock.patch.object(xbee_api.XBee, "_at_command", new_callable=mock.AsyncMock)
-@mock.patch.object(uart, "connect", return_value=mock.MagicMock())
-async def test_probe_success(mock_connect, mock_at_cmd):
-    """Test device probing."""
-
-    res = await xbee_api.XBee.probe(DEVICE_CONFIG)
-    assert res is True
-    assert mock_connect.call_count == 1
-    assert mock_connect.await_count == 1
-    assert mock_connect.call_args[0][0] == DEVICE_CONFIG
-    assert mock_at_cmd.call_count == 1
-    assert mock_connect.return_value.close.call_count == 1
-
-
-@mock.patch.object(xbee_api.XBee, "init_api_mode", return_value=True)
-@mock.patch.object(xbee_api.XBee, "_at_command", side_effect=asyncio.TimeoutError)
-@mock.patch.object(uart, "connect", return_value=mock.MagicMock())
-async def test_probe_success_api_mode(mock_connect, mock_at_cmd, mock_api_mode):
-    """Test device probing."""
-
-    res = await xbee_api.XBee.probe(DEVICE_CONFIG)
-    assert res is True
-    assert mock_connect.call_count == 1
-    assert mock_connect.await_count == 1
-    assert mock_connect.call_args[0][0] == DEVICE_CONFIG
-    assert mock_at_cmd.call_count == 1
-    assert mock_api_mode.call_count == 1
-    assert mock_connect.return_value.close.call_count == 1
-
-
-@mock.patch.object(xbee_api.XBee, "init_api_mode")
-@mock.patch.object(xbee_api.XBee, "_at_command", side_effect=asyncio.TimeoutError)
-@mock.patch.object(uart, "connect", return_value=mock.MagicMock())
-@pytest.mark.parametrize(
-    "exception",
-    (asyncio.TimeoutError, serial.SerialException, zigpy.exceptions.APIException),
-)
-async def test_probe_fail(mock_connect, mock_at_cmd, mock_api_mode, exception):
-    """Test device probing fails."""
-
-    mock_api_mode.side_effect = exception
-    mock_api_mode.reset_mock()
-    mock_at_cmd.reset_mock()
-    mock_connect.reset_mock()
-    res = await xbee_api.XBee.probe(DEVICE_CONFIG)
-    assert res is False
-    assert mock_connect.call_count == 1
-    assert mock_connect.await_count == 1
-    assert mock_connect.call_args[0][0] == DEVICE_CONFIG
-    assert mock_at_cmd.call_count == 1
-    assert mock_api_mode.call_count == 1
-    assert mock_connect.return_value.close.call_count == 1
-
-
-@mock.patch.object(xbee_api.XBee, "init_api_mode", return_value=False)
-@mock.patch.object(xbee_api.XBee, "_at_command", side_effect=asyncio.TimeoutError)
-@mock.patch.object(uart, "connect", return_value=mock.MagicMock())
-async def test_probe_fail_api_mode(mock_connect, mock_at_cmd, mock_api_mode):
-    """Test device probing fails."""
-
-    mock_api_mode.reset_mock()
-    mock_at_cmd.reset_mock()
-    mock_connect.reset_mock()
-    res = await xbee_api.XBee.probe(DEVICE_CONFIG)
-    assert res is False
-    assert mock_connect.call_count == 1
-    assert mock_connect.await_count == 1
-    assert mock_connect.call_args[0][0] == DEVICE_CONFIG
-    assert mock_at_cmd.call_count == 1
-    assert mock_api_mode.call_count == 1
-    assert mock_connect.return_value.close.call_count == 1
-
-
-@mock.patch.object(xbee_api.XBee, "connect", return_value=mock.MagicMock())
-async def test_xbee_new(conn_mck):
-    """Test new class method."""
-    api = await xbee_api.XBee.new(mock.sentinel.application, DEVICE_CONFIG)
-    assert isinstance(api, xbee_api.XBee)
-    assert conn_mck.call_count == 1
-    assert conn_mck.await_count == 1
-
-
-@mock.patch.object(xbee_api.XBee, "connect", return_value=mock.MagicMock())
-async def test_connection_lost(conn_mck):
+async def test_connection_lost(api):
     """Test `connection_lost` propagataion."""
-    api = await xbee_api.XBee.new(mock.sentinel.application, DEVICE_CONFIG)
-    await api.connect()
-
-    app = api._app = mock.MagicMock()
+    api.set_application(mock.AsyncMock())
 
     err = RuntimeError()
     api.connection_lost(err)
-
-    app.connection_lost.assert_called_once_with(err)
+    api._app.connection_lost.assert_called_once_with(err)
