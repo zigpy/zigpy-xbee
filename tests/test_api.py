@@ -323,7 +323,7 @@ def _handle_at_response(api, tsn, status, at_response=b""):
     return response
 
 
-def test_handle_at_response_none(api):
+async def test_handle_at_response_none(api):
     """Test AT successful response with no value."""
     tsn = 123
     fut = _handle_at_response(api, tsn, 0)
@@ -332,7 +332,7 @@ def test_handle_at_response_none(api):
     assert fut.exception() is None
 
 
-def test_handle_at_response_data(api):
+async def test_handle_at_response_data(api):
     """Test AT successful response with data."""
     tsn = 123
     status, response = 0, 0x23
@@ -342,7 +342,7 @@ def test_handle_at_response_data(api):
     assert fut.exception() is None
 
 
-def test_handle_at_response_error(api):
+async def test_handle_at_response_error(api):
     """Test AT unsuccessful response."""
     tsn = 123
     status, response = 1, 0x23
@@ -351,7 +351,7 @@ def test_handle_at_response_error(api):
     assert isinstance(fut.exception(), ATCommandError)
 
 
-def test_handle_at_response_invalid_command(api):
+async def test_handle_at_response_invalid_command(api):
     """Test invalid AT command response."""
     tsn = 123
     status, response = 2, 0x23
@@ -360,7 +360,7 @@ def test_handle_at_response_invalid_command(api):
     assert isinstance(fut.exception(), InvalidCommand)
 
 
-def test_handle_at_response_undef_error(api):
+async def test_handle_at_response_undef_error(api):
     """Test AT unsuccessful response with undefined error."""
     tsn = 123
     status, response = 0xEE, 0x23
@@ -482,7 +482,7 @@ def test_handle_tx_status_duplicate(api):
     assert send_fut.set_exception.call_count == 0
 
 
-def test_handle_registration_status(api):
+async def test_handle_registration_status(api):
     """Test device registration status."""
     frame_id = 0x12
     status = xbee_t.RegistrationStatus.SUCCESS
@@ -526,7 +526,7 @@ async def test_command_mode_at_cmd_timeout(api):
     assert result is None
 
 
-def test_handle_command_mode_rsp(api):
+async def test_handle_command_mode_rsp(api):
     """Test command mode response."""
     api._cmd_mode_future = None
     data = "OK"
