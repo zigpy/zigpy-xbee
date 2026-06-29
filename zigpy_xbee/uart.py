@@ -21,6 +21,42 @@ class Gateway(zigpy.serial.SerialProtocol):
     RESERVED = START + ESCAPE + XON + XOFF
     THIS_ONE = True
 
+    # Standard baudrates, previously sourced from the underlying serial library.
+    # zigpy now uses `serialx`, which does not expose a `BAUDRATES` attribute, so
+    # the list is kept here to avoid depending on the serial backend.
+    BAUDRATES = (
+        50,
+        75,
+        110,
+        134,
+        150,
+        200,
+        300,
+        600,
+        1200,
+        1800,
+        2400,
+        4800,
+        9600,
+        19200,
+        38400,
+        57600,
+        115200,
+        230400,
+        460800,
+        500000,
+        576000,
+        921600,
+        1000000,
+        1152000,
+        1500000,
+        2000000,
+        2500000,
+        3000000,
+        3500000,
+        4000000,
+    )
+
     def __init__(self, api):
         """Initialize instance."""
         super().__init__()
@@ -44,12 +80,10 @@ class Gateway(zigpy.serial.SerialProtocol):
     @baudrate.setter
     def baudrate(self, baudrate):
         """Set baudrate."""
-        if baudrate in self._transport.serial.BAUDRATES:
+        if baudrate in self.BAUDRATES:
             self._transport.serial.baudrate = baudrate
         else:
-            raise ValueError(
-                f"baudrate must be one of {self._transport.serial.BAUDRATES}"
-            )
+            raise ValueError(f"baudrate must be one of {self.BAUDRATES}")
 
     def connection_lost(self, exc) -> None:
         """Port was closed expectedly or unexpectedly."""
