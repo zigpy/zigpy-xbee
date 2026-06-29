@@ -310,7 +310,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         try:
             v = await asyncio.wait_for(send_req, timeout=TIMEOUT_TX_STATUS)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise zigpy.exceptions.DeliveryError(
                 "Timeout waiting for ACK", status=TXStatus.NETWORK_ACK_FAILURE
             )

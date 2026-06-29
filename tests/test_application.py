@@ -347,7 +347,7 @@ async def _test_start_network(
     def _at_command_mock(cmd, *args):
         nonlocal ai_tries
         if not api_mode:
-            raise asyncio.TimeoutError
+            raise TimeoutError
         if cmd == "CE" and legacy_module:
             raise InvalidCommand
 

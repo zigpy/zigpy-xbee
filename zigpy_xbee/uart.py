@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, Dict
+from typing import Any
 
 import zigpy.config
 import zigpy.serial
@@ -182,7 +182,7 @@ class Gateway(zigpy.serial.SerialProtocol):
         return 0xFF - (sum(data) % 0x100)
 
 
-async def connect(device_config: Dict[str, Any], api) -> Gateway:
+async def connect(device_config: dict[str, Any], api) -> Gateway:
     """Connect to the device."""
     transport, protocol = await zigpy.serial.create_serial_connection(
         loop=asyncio.get_running_loop(),

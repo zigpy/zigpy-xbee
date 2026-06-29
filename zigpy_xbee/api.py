@@ -4,7 +4,7 @@ import asyncio
 import binascii
 import functools
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from zigpy.exceptions import APIException, DeliveryError
 import zigpy.types as t
@@ -274,15 +274,15 @@ AT_COMMAND_RESULT = {
 class XBee:
     """Class implementing XBee communication protocol."""
 
-    def __init__(self, device_config: Dict[str, Any]) -> None:
+    def __init__(self, device_config: dict[str, Any]) -> None:
         """Initialize instance."""
         self._config = device_config
-        self._uart: Optional[uart.Gateway] = None
+        self._uart: uart.Gateway | None = None
         self._seq: int = 1
         self._commands_by_id = {v[0]: k for k, v in COMMAND_RESPONSES.items()}
         self._awaiting = {}
         self._app = None
-        self._cmd_mode_future: Optional[asyncio.Future] = None
+        self._cmd_mode_future: asyncio.Future | None = None
         self._reset: asyncio.Event = asyncio.Event()
         self._running: asyncio.Event = asyncio.Event()
 
@@ -310,7 +310,7 @@ class XBee:
             try:
                 # Ensure we have escaped commands
                 await self._at_command("AP", 2)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 if not await self.init_api_mode():
                     raise APIException("Failed to configure XBee for API mode")
         except Exception:
@@ -354,7 +354,7 @@ class XBee:
                 ),
                 timeout=REMOTE_AT_COMMAND_TIMEOUT,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             LOGGER.warning("No response to %s command", name)
             raise
 
@@ -366,7 +366,7 @@ class XBee:
                 self._command(cmd_type, name.encode("ascii"), data),
                 timeout=AT_COMMAND_TIMEOUT,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             LOGGER.warning("%s: No response to %s command", cmd_type, name)
             raise
 
@@ -512,7 +512,7 @@ class XBee:
         try:
             res = await asyncio.wait_for(self._cmd_mode_future, timeout=2)
             return res
-        except asyncio.TimeoutError:
+        except TimeoutError:
             LOGGER.debug("Command mode no response to AT '%s' command", command)
             return None
 
