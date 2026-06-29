@@ -12,9 +12,9 @@ authors = [
 ]
 readme = "README.md"
 license = {text = "GPL-3.0"}
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 dependencies = [
-    "zigpy>=0.70.0",
+    "zigpy>=2.0.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -23,7 +23,6 @@ exclude = ["tests", "tests.*"]
 [project.optional-dependencies]
 testing = [
     "pytest>=7.1.2",
-    "asynctest>=0.13.0",
     "pytest-asyncio>=0.19.0",
 ]
 
