@@ -96,17 +96,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._api._at_command("SP", CONF_CYCLIC_SLEEP_PERIOD)
         await self._api._at_command("SN", CONF_POLL_TIMEOUT)
 
-        dev = zigpy.device.Device(
+        xbee_dev = XBeeCoordinator(
             self, self.state.node_info.ieee, self.state.node_info.nwk
         )
-        dev.status = zigpy.device.Status.ENDPOINTS_INIT
-        dev.add_endpoint(XBEE_ENDPOINT_ID)
-
-        xbee_dev = XBeeCoordinator(
-            self, self.state.node_info.ieee, self.state.node_info.nwk, dev
-        )
+        xbee_dev.status = zigpy.device.Status.ENDPOINTS_INIT
         self.listener_event("raw_device_initialized", xbee_dev)
-        self.devices[dev.ieee] = xbee_dev
+        self.devices[xbee_dev.ieee] = xbee_dev
 
         await self.register_endpoints()
 
@@ -469,12 +464,10 @@ class XBeeCoordinator(zigpy.device.Device):
         application: zigpy.application.ControllerApplication,
         ieee: zigpy.types.EUI64,
         nwk: zigpy.types.NWK,
-        replaces: zigpy.device.Device,
     ):
         """Initialize instance."""
         super().__init__(application, ieee, nwk)
 
-        self.status = replaces.status
         self.manufacturer = "Digi"
         self.model = "XBee"
         self.node_desc = zdo_t.NodeDescriptor(
