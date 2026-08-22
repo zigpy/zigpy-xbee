@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import logging
 import math
 import statistics
@@ -372,7 +372,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             LOGGER.info("handle_rx self addressed")
 
         try:
-            self._device.last_seen = datetime.now(timezone.utc)
+            self._device.last_seen = datetime.now(UTC)
         except KeyError:
             pass
 
