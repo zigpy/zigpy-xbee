@@ -5,9 +5,12 @@ from unittest import mock
 
 import pytest
 import zigpy.config as config
+import zigpy.device
+import zigpy.endpoint
 import zigpy.exceptions
 import zigpy.state
 import zigpy.types as t
+from zigpy.zcl.clusters.general import Basic, OnOff
 import zigpy.zdo
 import zigpy.zdo.types as zdo_t
 
@@ -347,7 +350,7 @@ async def _test_start_network(
     def _at_command_mock(cmd, *args):
         nonlocal ai_tries
         if not api_mode:
-            raise asyncio.TimeoutError
+            raise TimeoutError
         if cmd == "CE" and legacy_module:
             raise InvalidCommand
 
@@ -412,6 +415,53 @@ async def test_start_network(app):
 
     with pytest.raises(zigpy.exceptions.NetworkNotFormed):
         await _test_start_network(app, ai_status=0x00, zs=1, legacy_module=True)
+
+
+async def test_start_network_coordinator_device(app):
+    """Test the coordinator device `start_network` builds."""
+    await _test_start_network(app, ai_status=0x00)
+
+    xbee_dev = app._device
+    assert isinstance(xbee_dev, application.XBeeCoordinator)
+    assert xbee_dev.status == zigpy.device.Status.ENDPOINTS_INIT
+    assert xbee_dev.manufacturer == "Digi"
+    assert xbee_dev.model == "XBee"
+    assert xbee_dev.node_desc.logical_type == zdo_t.LogicalType.Coordinator
+
+    # The XBee-specific endpoint, built by `XBeeCoordinator.__init__`
+    xbee_ep = xbee_dev.endpoints[application.XBEE_ENDPOINT_ID]
+    assert xbee_ep.status == zigpy.endpoint.Status.ZDO_INIT
+    assert xbee_ep.profile_id == 0xC105
+    assert xbee_ep.device_type == 0x0050
+    assert isinstance(xbee_ep.in_clusters[0x0006], application.XBeeGroup)
+    assert isinstance(xbee_ep.in_clusters[0x8006], application.XBeeGroupResponse)
+    # `add_to_group()`/`remove_from_group()` dispatch through `ep.groups`
+    assert xbee_ep.groups is xbee_ep.in_clusters[0x0006]
+    assert xbee_ep.xbee_groups_response is xbee_ep.in_clusters[0x8006]
+
+
+async def test_start_network_registers_endpoints(app):
+    """Test that zigpy's endpoints are registered with their clusters."""
+    await _test_start_network(app, ai_status=0x00)
+
+    # The quirks-based `add_endpoint()` this replaces silently registered bare
+    # endpoints: no profile, no device type and no clusters at all. The exact
+    # descriptors come from zigpy, so only their presence is asserted here.
+    ep1 = app._device.endpoints[1]
+    assert ep1.status == zigpy.endpoint.Status.ZDO_INIT
+    assert ep1.profile_id == 0x0104
+    assert ep1.device_type is not None
+    assert isinstance(ep1.in_clusters[0x0000], Basic)
+    assert ep1.out_clusters
+    # `XBeeGroup` overrides `cluster_id` to `0x0006`, which is `OnOff`'s real
+    # cluster ID: `_skip_registry` keeps it out of the global cluster registry,
+    # so unrelated endpoints still get `OnOff` here.
+    assert isinstance(ep1.in_clusters[0x0006], OnOff)
+
+    ep2 = app._device.endpoints[2]
+    assert ep2.status == zigpy.endpoint.Status.ZDO_INIT
+    assert ep2.device_type is not None
+    assert isinstance(ep2.in_clusters[0x0000], Basic)
 
 
 async def test_start_network_no_api_mode(app):

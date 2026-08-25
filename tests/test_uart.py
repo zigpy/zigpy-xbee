@@ -4,8 +4,8 @@ import asyncio
 from unittest import mock
 
 import pytest
-import serial_asyncio_fast
 import zigpy.config
+import zigpy.serial
 
 from zigpy_xbee import uart
 
@@ -22,7 +22,6 @@ def gw():
     """Gateway fixture."""
     gw = uart.Gateway(mock.MagicMock())
     gw._transport = mock.MagicMock()
-    gw._transport.serial.BAUDRATES = serial_asyncio_fast.serial.Serial.BAUDRATES
     return gw
 
 
@@ -48,7 +47,7 @@ async def test_connect(monkeypatch):
         loop.call_soon(protocol.connection_made, None)
         return None, protocol
 
-    monkeypatch.setattr(serial_asyncio_fast, "create_serial_connection", mock_conn)
+    monkeypatch.setattr(zigpy.serial, "create_serial_connection", mock_conn)
 
     await uart.connect(DEVICE_CONFIG, api)
 

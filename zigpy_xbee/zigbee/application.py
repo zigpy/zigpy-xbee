@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 import logging
 import math
 import statistics
@@ -12,8 +13,8 @@ import zigpy.application
 import zigpy.config
 from zigpy.config import CONF_DEVICE
 import zigpy.device
+import zigpy.endpoint
 import zigpy.exceptions
-import zigpy.quirks
 import zigpy.state
 import zigpy.types
 import zigpy.util
@@ -95,17 +96,12 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._api._at_command("SP", CONF_CYCLIC_SLEEP_PERIOD)
         await self._api._at_command("SN", CONF_POLL_TIMEOUT)
 
-        dev = zigpy.device.Device(
+        xbee_dev = XBeeCoordinator(
             self, self.state.node_info.ieee, self.state.node_info.nwk
         )
-        dev.status = zigpy.device.Status.ENDPOINTS_INIT
-        dev.add_endpoint(XBEE_ENDPOINT_ID)
-
-        xbee_dev = XBeeCoordinator(
-            self, self.state.node_info.ieee, self.state.node_info.nwk, dev
-        )
+        xbee_dev.status = zigpy.device.Status.ENDPOINTS_INIT
         self.listener_event("raw_device_initialized", xbee_dev)
-        self.devices[dev.ieee] = xbee_dev
+        self.devices[xbee_dev.ieee] = xbee_dev
 
         await self.register_endpoints()
 
@@ -237,13 +233,14 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
     async def add_endpoint(self, descriptor: zdo_t.SimpleDescriptor) -> None:
         """Register a new endpoint on the device."""
-        self._device.replacement["endpoints"][descriptor.endpoint] = {
-            "device_type": descriptor.device_type,
-            "profile_id": descriptor.profile,
-            "input_clusters": descriptor.input_clusters,
-            "output_clusters": descriptor.output_clusters,
-        }
-        self._device.add_endpoint(descriptor.endpoint)
+        ep = self._device.add_endpoint(descriptor.endpoint)
+        ep.status = zigpy.endpoint.Status.ZDO_INIT
+        ep.profile_id = descriptor.profile
+        ep.device_type = descriptor.device_type
+        for cluster_id in descriptor.input_clusters:
+            ep.add_input_cluster(cluster_id)
+        for cluster_id in descriptor.output_clusters:
+            ep.add_output_cluster(cluster_id)
 
     async def _get_association_state(self):
         """Wait for Zigbee to start."""
@@ -308,7 +305,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         try:
             v = await asyncio.wait_for(send_req, timeout=TIMEOUT_TX_STATUS)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise zigpy.exceptions.DeliveryError(
                 "Timeout waiting for ACK", status=TXStatus.NETWORK_ACK_FAILURE
             )
@@ -370,7 +367,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             LOGGER.info("handle_rx self addressed")
 
         try:
-            self._device.update_last_seen()
+            self._device.last_seen = datetime.now(UTC)
         except KeyError:
             pass
 
@@ -427,33 +424,52 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 break
 
 
-class XBeeCoordinator(zigpy.quirks.CustomDevice):
-    """Zigpy Device representing Coordinator."""
+class XBeeGroup(Groups):
+    """XBeeGroup cluster.
 
-    class XBeeGroup(zigpy.quirks.CustomCluster, Groups):
-        """XBeeGroup custom cluster."""
+    Subclasses the standard ``Groups`` cluster but is kept out of the global
+    cluster registry, as it is only used on the XBee coordinator device.
+    """
 
-        cluster_id = 0x0006
+    _skip_registry = True
+    cluster_id = 0x0006
 
-    class XBeeGroupResponse(zigpy.quirks.CustomCluster, Groups):
-        """XBeeGroupResponse custom cluster."""
 
-        cluster_id = 0x8006
-        ep_attribute = "xbee_groups_response"
+class XBeeGroupResponse(Groups):
+    """XBeeGroupResponse cluster.
 
-        client_commands = {
-            **Groups.client_commands,
-            0x04: foundation.ZCLCommandDef(
-                "remove_all_response",
-                {"status": foundation.Status},
-                direction=foundation.Direction.Client_to_Server,
-            ),
-        }
+    Subclasses the standard ``Groups`` cluster but is kept out of the global
+    cluster registry, as it is only used on the XBee coordinator device.
+    """
 
-    def __init__(self, *args, **kwargs):
+    _skip_registry = True
+    cluster_id = 0x8006
+    ep_attribute = "xbee_groups_response"
+
+    client_commands = {
+        **Groups.client_commands,
+        0x04: foundation.ZCLCommandDef(
+            "remove_all_response",
+            {"status": foundation.Status},
+            direction=foundation.Direction.Client_to_Server,
+        ),
+    }
+
+
+class XBeeCoordinator(zigpy.device.Device):
+    """Zigpy Device representing the coordinator."""
+
+    def __init__(
+        self,
+        application: zigpy.application.ControllerApplication,
+        ieee: zigpy.types.EUI64,
+        nwk: zigpy.types.NWK,
+    ):
         """Initialize instance."""
+        super().__init__(application, ieee, nwk)
 
-        super().__init__(*args, **kwargs)
+        self.manufacturer = "Digi"
+        self.model = "XBee"
         self.node_desc = zdo_t.NodeDescriptor(
             logical_type=zdo_t.LogicalType.Coordinator,
             complex_descriptor_available=0,
@@ -475,15 +491,9 @@ class XBeeCoordinator(zigpy.quirks.CustomDevice):
             descriptor_capability_field=zdo_t.NodeDescriptor.DescriptorCapability.NONE,
         )
 
-    replacement = {
-        "manufacturer": "Digi",
-        "model": "XBee",
-        "endpoints": {
-            XBEE_ENDPOINT_ID: {
-                "device_type": 0x0050,
-                "profile_id": 0xC105,
-                "input_clusters": [XBeeGroup, XBeeGroupResponse],
-                "output_clusters": [],
-            }
-        },
-    }
+        ep = self.add_endpoint(XBEE_ENDPOINT_ID)
+        ep.status = zigpy.endpoint.Status.ZDO_INIT
+        ep.profile_id = 0xC105
+        ep.device_type = 0x0050
+        for cluster in (XBeeGroup, XBeeGroupResponse):
+            ep.add_input_cluster(cluster.cluster_id, cluster(ep, is_server=True))
