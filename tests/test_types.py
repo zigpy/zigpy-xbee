@@ -16,7 +16,7 @@ def test_bytes_serialize():
 def test_bytes_deserialize():
     """Test Bytes.deserialize()."""
     data, rest = xbee_t.Bytes.deserialize(0x89AB.to_bytes(3, "big"))
-    assert data == b"\x00\x89\xAB"
+    assert data == b"\x00\x89\xab"
     assert rest == b""
 
 
@@ -76,7 +76,7 @@ def test_nwk():
 
 def test_eui64():
     """Test EUI64 class."""
-    extra = b"\xBE\xEF"
+    extra = b"\xbe\xef"
     data = b"01234567"
 
     result, rest = xbee_t.EUI64.deserialize(data + extra)

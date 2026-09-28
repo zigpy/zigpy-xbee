@@ -57,7 +57,7 @@ class UndefinedEnumMeta(enum.EnumMeta):
             try:
                 return super().__call__(cls._UNDEFINED)
             except AttributeError:
-                raise exc
+                raise exc from None
 
 
 class UndefinedEnum(enum.Enum, metaclass=UndefinedEnumMeta):

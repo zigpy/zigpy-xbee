@@ -13,8 +13,8 @@ LOGGER = logging.getLogger(__name__)
 class Gateway(zigpy.serial.SerialProtocol):
     """Class implementing the UART protocol."""
 
-    START = b"\x7E"
-    ESCAPE = b"\x7D"
+    START = b"\x7e"
+    ESCAPE = b"\x7d"
     XON = b"\x11"
     XOFF = b"\x13"
 

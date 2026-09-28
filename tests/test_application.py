@@ -369,7 +369,7 @@ async def _test_start_network(
             "SL": 0x04030201,
             "ZS": zs,
             "VR": 0x1234,
-        }.get(cmd, None)
+        }.get(cmd)
 
     def init_api_mode_mock():
         nonlocal api_mode
@@ -492,7 +492,7 @@ async def test_permit_with_link_key(app):
     app._api._command = mock.AsyncMock(return_value=xbee_t.TXStatus.SUCCESS)
     app._api._at_command = mock.AsyncMock(return_value="OK")
     node = t.EUI64(b"\x01\x02\x03\x04\x05\x06\x07\x08")
-    link_key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F"
+    link_key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f"
     time_s = 500
     await app.permit_with_link_key(node=node, link_key=link_key, time_s=time_s)
     app._api._at_command.assert_called_once_with("KT", time_s)
@@ -735,7 +735,7 @@ async def test_move_network_to_channel(app):
 
 async def test_energy_scan(app):
     """Test channel energy scan."""
-    rssi = b"\x0A\x0F\x14\x19\x1E\x23\x28\x2D\x32\x37\x3C\x41\x46\x4B\x50\x55"
+    rssi = b"\x0a\x0f\x14\x19\x1e\x23\x28\x2d\x32\x37\x3c\x41\x46\x4b\x50\x55"
     app._api._at_command = mock.AsyncMock(spec=XBee._at_command, return_value=rssi)
     time_s = 3
     count = 3
@@ -774,7 +774,7 @@ async def test_energy_scan_legacy_module(app):
         channels=list(range(11, 27)), duration_exp=time_s, count=count
     )
     app._api._at_command.assert_called_once_with("ED", bytes([time_s]))
-    assert energy == {c: 0 for c in range(11, 27)}
+    assert energy == dict.fromkeys(range(11, 27), 0)
 
 
 def test_neighbors_updated(app, device):
@@ -819,7 +819,7 @@ def test_neighbors_updated(app, device):
         # Let's also include an unknown device
         zdo_t.Neighbor(
             extended_pan_id=pan_id,
-            ieee=t.EUI64(b"\x00\x0F\x0E\x0D\x0C\x0B\x0A\x09"),
+            ieee=t.EUI64(b"\x00\x0f\x0e\x0d\x0c\x0b\x0a\x09"),
             nwk=t.NWK(0x9999),
             device_type=0x2,
             rx_on_when_idle=0x0,
