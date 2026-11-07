@@ -119,6 +119,8 @@ def _test_rx(
 def test_rx(app):
     """Test message receiving."""
     device = mock.MagicMock()
+    # zigpy >= 2.4 requires the coordinator to be a ZigbeeDevice
+    device.__class__ = zigpy.device.ZigbeeDevice
     _test_rx(app, device, 0x1234, data=b"\x01\x02\x03\x04")
     assert device.packet_received.call_count == 1
     packet = device.packet_received.call_args[0][0]
@@ -135,6 +137,7 @@ def test_rx_nwk_0000(app):
     """Test receiving self-addressed message."""
     app._handle_reply = mock.MagicMock()
     app.get_device = mock.MagicMock()
+    app.get_device.return_value.__class__ = zigpy.device.ZigbeeDevice
     app.handle_rx(
         b"\x01\x02\x03\x04\x05\x06\x07\x08",
         0x0000,
@@ -643,6 +646,7 @@ def test_rx_device_annce(app, ieee, nwk):
     cluster_id = zdo_t.ZDOCmd.Device_annce
     device = mock.MagicMock()
     device.status = device.Status.NEW
+    device.__class__ = zigpy.device.ZigbeeDevice
     device.zdo = zigpy.zdo.ZDO(None)
     app.get_device = mock.MagicMock(return_value=device)
     app.handle_join = mock.MagicMock()
