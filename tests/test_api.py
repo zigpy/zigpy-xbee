@@ -53,9 +53,11 @@ async def test_connect_initial_timeout_failure():
     api._at_command = mock.AsyncMock(side_effect=asyncio.TimeoutError)
     api.init_api_mode = mock.AsyncMock(return_value=False)
 
-    with mock.patch("zigpy_xbee.uart.connect") as mock_connect:
-        with pytest.raises(zigpy.exceptions.APIException):
-            await api.connect()
+    with (
+        mock.patch("zigpy_xbee.uart.connect") as mock_connect,
+        pytest.raises(zigpy.exceptions.APIException),
+    ):
+        await api.connect()
 
     assert mock_connect.return_value.disconnect.mock_calls == [mock.call()]
 
@@ -565,9 +567,7 @@ async def test_api_mode_at_commands(api):
     assert res is True
 
     async def mock_at_cmd(cmd):
-        if cmd == "ATWR\r":
-            return False
-        return True
+        return cmd != "ATWR\r"
 
     api.command_mode_at_cmd = mock_at_cmd
     res = await api.api_mode_at_commands(57600)
@@ -590,9 +590,7 @@ async def test_init_api_mode(api, monkeypatch):
     assert api.enter_at_command_mode.call_count == 10
 
     async def enter_at_mode():
-        if api._uart.baudrate == 9600:
-            return True
-        return False
+        return api._uart.baudrate == 9600
 
     api._uart.baudrate = 57600
     api.enter_at_command_mode = mock.MagicMock(side_effect=enter_at_mode)

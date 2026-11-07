@@ -27,7 +27,8 @@ def gw():
 
 def test_baudrate(gw):
     """Test setting baudrate."""
-    gw.baudrate
+    gw._transport.serial.baudrate = 57600
+    assert gw.baudrate == 57600
     gw.baudrate = 19200
     assert gw._transport.serial.baudrate == 19200
 
@@ -62,7 +63,7 @@ def test_command_mode_rsp(gw):
 
 def test_command_mode_send(gw):
     """Test command mode request."""
-    data = b"ATAP2\x0D"
+    data = b"ATAP2\x0d"
     gw.command_mode_send(data)
     gw._transport.write.assert_called_once_with(data)
 
@@ -105,7 +106,7 @@ def test_data_received_incomplete_frame(gw):
 
 def test_data_received_at_response_non_cmd_mode(gw):
     """Test command mode response while not in command mode."""
-    data = b"OK\x0D"
+    data = b"OK\x0d"
     gw.frame_received = mock.MagicMock()
     gw.command_mode_rsp = mock.MagicMock()
 
@@ -115,7 +116,7 @@ def test_data_received_at_response_non_cmd_mode(gw):
 
 def test_data_received_at_response_in_cmd_mode(gw):
     """Test command mode response in command mode."""
-    data = b"OK\x0D"
+    data = b"OK\x0d"
     gw.frame_received = mock.MagicMock()
     gw.command_mode_rsp = mock.MagicMock()
 
@@ -131,7 +132,7 @@ def test_data_received_at_response_in_cmd_mode(gw):
 
 def test_extract(gw):
     """Test handling extra chaining data."""
-    gw._buffer = b"\x7E\x00\x02\x23\x7D\x31\xCBextra"
+    gw._buffer = b"\x7e\x00\x02\x23\x7d\x31\xcbextra"
     frame = gw._extract_frame()
     assert frame == b"\x23\x11"
     assert gw._buffer == b"extra"
@@ -139,7 +140,7 @@ def test_extract(gw):
 
 def test_extract_wrong_checksum(gw):
     """Test API frame with wrong checksum and extra data."""
-    gw._buffer = b"\x7E\x00\x02\x23\x7D\x31\xCEextra"
+    gw._buffer = b"\x7e\x00\x02\x23\x7d\x31\xceextra"
     frame = gw._extract_frame()
     assert frame is None
     assert gw._buffer == b"extra"
@@ -147,7 +148,7 @@ def test_extract_wrong_checksum(gw):
 
 def test_extract_checksum_none(gw):
     """Test API frame with no checksum."""
-    data = b"\x7E\x00\x02\x23\x7D\x31"
+    data = b"\x7e\x00\x02\x23\x7d\x31"
     gw._buffer = data
     gw._checksum = lambda x: None
     frame = gw._extract_frame()
@@ -157,7 +158,7 @@ def test_extract_checksum_none(gw):
 
 def test_extract_frame_len_none(gw):
     """Test API frame with no length."""
-    data = b"\x7E"
+    data = b"\x7e"
     gw._buffer = data
     frame = gw._extract_frame()
     assert frame is None
@@ -166,7 +167,7 @@ def test_extract_frame_len_none(gw):
 
 def test_extract_frame_no_start(gw):
     """Test API frame without frame ID."""
-    data = b"\x00\x02\x23\x7D\x31"
+    data = b"\x00\x02\x23\x7d\x31"
     gw._buffer = data
     frame = gw._extract_frame()
     assert frame is None
@@ -184,7 +185,7 @@ def test_frame_received(gw):
 def test_send(gw):
     """Test data send."""
     gw.send(b"\x23\x11")
-    data = b"\x7E\x00\x02\x23\x7D\x31\xCB"
+    data = b"\x7e\x00\x02\x23\x7d\x31\xcb"
     gw._transport.write.assert_called_once_with(data)
 
 
@@ -193,7 +194,7 @@ def test_escape(gw):
     data = b"".join(
         [
             a.to_bytes(1, "big") + b.to_bytes(1, "big")
-            for a, b in zip(gw.RESERVED, b"\x22\x33\x44\x55")
+            for a, b in zip(gw.RESERVED, b"\x22\x33\x44\x55", strict=True)
         ]
     )
     escaped = gw._escape(data)
@@ -210,7 +211,7 @@ def test_unescape(gw):
     chk = b"".join(
         [
             a.to_bytes(1, "big") + b.to_bytes(1, "big")
-            for a, b in zip(gw.RESERVED, b"\x22\x33\x44\x55")
+            for a, b in zip(gw.RESERVED, b"\x22\x33\x44\x55", strict=True)
         ]
     )
     unescaped, rest = gw._get_unescaped(escaped + extra, 8)
