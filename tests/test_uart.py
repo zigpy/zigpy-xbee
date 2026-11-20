@@ -52,6 +52,29 @@ async def test_connect(monkeypatch):
     await uart.connect(DEVICE_CONFIG, api)
 
 
+@pytest.mark.parametrize("flow_control", [None, "software", "hardware"])
+async def test_connect_flow_control(monkeypatch, flow_control):
+    """Test that the configured flow control is used for the serial port."""
+    api = mock.MagicMock()
+    conn_kwargs = {}
+
+    async def mock_conn(loop, protocol_factory, **kwargs):
+        conn_kwargs.update(kwargs)
+        protocol = protocol_factory()
+        loop.call_soon(protocol.connection_made, None)
+        return None, protocol
+
+    monkeypatch.setattr(zigpy.serial, "create_serial_connection", mock_conn)
+
+    await uart.connect(
+        {**DEVICE_CONFIG, zigpy.config.CONF_DEVICE_FLOW_CONTROL: flow_control}, api
+    )
+
+    assert conn_kwargs["baudrate"] == 57600
+    assert conn_kwargs["flow_control"] == flow_control
+    assert "xonxoff" not in conn_kwargs
+
+
 def test_command_mode_rsp(gw):
     """Test command mode response."""
     data = b"OK"
