@@ -3,7 +3,7 @@
 codecov
 colorlog
 codespell
-mypy==1.6.0
+mypy==2.4.1
 pre-commit
 pylint
 pytest-cov
