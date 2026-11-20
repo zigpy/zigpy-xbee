@@ -32,7 +32,11 @@ MYPY_FLAGS = [
 
 def run_mypy() -> list[str]:
     """Run mypy with no error codes disabled and capture output."""
-    stdout, stderr, _ = mypy_api.run(MYPY_FLAGS)
+    stdout, stderr, status = mypy_api.run(MYPY_FLAGS)
+    if status == 2:
+        # A fatal error (e.g. a syntax error) stops mypy with partial output, which
+        # must not replace the recorded overrides
+        raise SystemExit(f"mypy failed with exit status 2:\n{stderr}{stdout}")
     return stdout.splitlines() + stderr.splitlines()
 
 
