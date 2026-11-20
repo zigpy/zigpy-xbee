@@ -1,10 +1,13 @@
 """XBee API implementation."""
 
+from __future__ import annotations
+
 import asyncio
 import binascii
+from collections.abc import Callable
 import functools
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from zigpy.exceptions import APIException, DeliveryError
 import zigpy.types as t
@@ -18,6 +21,9 @@ from zigpy_xbee.exceptions import (
 )
 
 from . import types as xbee_t, uart
+
+if TYPE_CHECKING:
+    from zigpy_xbee.zigbee.application import ControllerApplication
 
 LOGGER = logging.getLogger(__name__)
 
@@ -128,7 +134,7 @@ COMMAND_RESPONSES = {
 }
 
 # https://www.digi.com/resources/documentation/digidocs/pdfs/90001539.pdf pg 175
-AT_COMMANDS = {
+AT_COMMANDS: dict[str, Any] = {
     # Addressing commands
     "DH": t.uint32_t_be,
     "DL": t.uint32_t_be,
@@ -280,24 +286,24 @@ class XBee:
         self._uart: uart.Gateway | None = None
         self._seq: int = 1
         self._commands_by_id = {v[0]: k for k, v in COMMAND_RESPONSES.items()}
-        self._awaiting = {}
-        self._app = None
-        self._cmd_mode_future: asyncio.Future | None = None
+        self._awaiting: dict[int, tuple[asyncio.Future[Any]]] = {}
+        self._app: ControllerApplication | None = None
+        self._cmd_mode_future: asyncio.Future[bool | str] | None = None
         self._reset: asyncio.Event = asyncio.Event()
         self._running: asyncio.Event = asyncio.Event()
 
     @property
-    def reset_event(self):
+    def reset_event(self) -> asyncio.Event:
         """Return reset event."""
         return self._reset
 
     @property
-    def coordinator_started_event(self):
+    def coordinator_started_event(self) -> asyncio.Event:
         """Return coordinator started."""
         return self._running
 
     @property
-    def is_running(self):
+    def is_running(self) -> bool:
         """Return true if coordinator is running."""
         return self.coordinator_started_event.is_set()
 
@@ -319,18 +325,22 @@ class XBee:
             await self.disconnect()
             raise
 
-    def connection_lost(self, exc: Exception) -> None:
+    def connection_lost(self, exc: BaseException | None) -> None:
         """Lost serial connection."""
         if self._app is not None:
-            self._app.connection_lost(exc)
+            # zigpy annotates `exc` as `Exception`, but asyncio passes `None` on a
+            # clean close and any `BaseException` otherwise
+            self._app.connection_lost(exc)  # type: ignore[arg-type]
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Close the connection."""
         if self._uart:
             await self._uart.disconnect()
             self._uart = None
 
-    def _command(self, name, *args, mask_frame_id=False):
+    def _command(
+        self, name: str, *args: Any, mask_frame_id: bool = False
+    ) -> asyncio.Future[Any] | None:
         """Send API frame to the device."""
         LOGGER.debug("Command %s %s", name, args)
         if self._uart is None:
@@ -338,36 +348,38 @@ class XBee:
         frame_id = 0 if mask_frame_id else self._seq
         data, needs_response = self._api_frame(name, frame_id, *args)
         self._uart.send(data)
-        future = None
+        future: asyncio.Future[Any] | None = None
         if needs_response and frame_id:
             future = asyncio.Future()
             self._awaiting[frame_id] = (future,)
         self._seq = (self._seq % 255) + 1
         return future
 
-    async def _remote_at_command(self, ieee, nwk, options, name, *args):
+    async def _remote_at_command(
+        self, ieee: t.EUI64, nwk: t.NWK, options: int, name: str, *args: Any
+    ) -> Any:
         """Execute AT command on a different XBee module in the network."""
         LOGGER.debug("Remote AT command: %s %s", name, args)
         data = t.serialize(args, (AT_COMMANDS[name],))
+        future = self._command(
+            "remote_at", ieee, nwk, options, name.encode("ascii"), data
+        )
+        # Remote AT commands always have a response frame and a non-zero frame ID
+        assert future is not None
         try:
-            return await asyncio.wait_for(
-                self._command(
-                    "remote_at", ieee, nwk, options, name.encode("ascii"), data
-                ),
-                timeout=REMOTE_AT_COMMAND_TIMEOUT,
-            )
+            return await asyncio.wait_for(future, timeout=REMOTE_AT_COMMAND_TIMEOUT)
         except TimeoutError:
             LOGGER.warning("No response to %s command", name)
             raise
 
-    async def _at_partial(self, cmd_type, name, *args):
+    async def _at_partial(self, cmd_type: str, name: str, *args: Any) -> Any:
         LOGGER.debug("%s command: %s %s", cmd_type, name, args)
         data = t.serialize(args, (AT_COMMANDS[name],))
+        future = self._command(cmd_type, name.encode("ascii"), data)
+        # AT commands always have a response frame and a non-zero frame ID
+        assert future is not None
         try:
-            return await asyncio.wait_for(
-                self._command(cmd_type, name.encode("ascii"), data),
-                timeout=AT_COMMAND_TIMEOUT,
-            )
+            return await asyncio.wait_for(future, timeout=AT_COMMAND_TIMEOUT)
         except TimeoutError:
             LOGGER.warning("%s: No response to %s command", cmd_type, name)
             raise
@@ -375,12 +387,12 @@ class XBee:
     _at_command = functools.partialmethod(_at_partial, "at")
     _queued_at = functools.partialmethod(_at_partial, "queued_at")
 
-    def _api_frame(self, name, *args):
+    def _api_frame(self, name: str, *args: Any) -> tuple[bytes, int | None]:
         """Build API frame."""
         c = COMMAND_REQUESTS[name]
         return (bytes([c[0]]) + t.serialize(args, c[1])), c[2]
 
-    def frame_received(self, data):
+    def frame_received(self, data: bytes) -> None:
         """Handle API frame from the device."""
         command = self._commands_by_id[data[0]]
         LOGGER.debug("Frame received: %s", command)
@@ -390,7 +402,9 @@ class XBee:
         except AttributeError:
             LOGGER.error("No '%s' handler. Data: %s", command, binascii.hexlify(data))
 
-    def _handle_at_response(self, frame_id, cmd, status, value):
+    def _handle_at_response(
+        self, frame_id: int, cmd: bytes, status: int, value: bytes
+    ) -> None:
         """Local AT command response."""
         (fut,) = self._awaiting.pop(frame_id)
 
@@ -410,18 +424,28 @@ class XBee:
         response, remains = response_type.deserialize(value)
         fut.set_result(response)
 
-    def _handle_remote_at_response(self, frame_id, ieee, nwk, cmd, status, value):
+    def _handle_remote_at_response(
+        self,
+        frame_id: int,
+        ieee: xbee_t.EUI64,
+        nwk: xbee_t.NWK,
+        cmd: bytes,
+        status: int,
+        value: bytes,
+    ) -> None:
         """Remote AT command response."""
         LOGGER.debug(
             "Remote AT command response from: %s",
             (frame_id, ieee, nwk, cmd, status, value),
         )
-        return self._handle_at_response(frame_id, cmd, status, value)
+        self._handle_at_response(frame_id, cmd, status, value)
 
-    def _handle_many_to_one_rri(self, ieee, nwk, reserved):
+    def _handle_many_to_one_rri(
+        self, ieee: xbee_t.EUI64, nwk: xbee_t.NWK, reserved: int
+    ) -> None:
         LOGGER.debug("_handle_many_to_one_rri: %s", (ieee, nwk, reserved))
 
-    def _handle_modem_status(self, status):
+    def _handle_modem_status(self, status: xbee_t.ModemStatus) -> None:
         LOGGER.debug("Handle modem status frame: %s", status)
         status = status
         if status == xbee_t.ModemStatus.COORDINATOR_STARTED:
@@ -439,19 +463,40 @@ class XBee:
             self._app.handle_modem_status(status)
 
     def _handle_explicit_rx_indicator(
-        self, ieee, nwk, src_ep, dst_ep, cluster, profile, rx_opts, data
-    ):
+        self,
+        ieee: xbee_t.EUI64,
+        nwk: xbee_t.NWK,
+        src_ep: t.uint8_t,
+        dst_ep: t.uint8_t,
+        cluster: t.uint16_t_be,
+        profile: t.uint16_t_be,
+        rx_opts: t.uint8_t,
+        data: xbee_t.Bytes,
+    ) -> None:
         LOGGER.debug(
             "_handle_explicit_rx: %s",
             (ieee, nwk, dst_ep, cluster, rx_opts, binascii.hexlify(data)),
         )
-        self._app.handle_rx(ieee, nwk, src_ep, dst_ep, cluster, profile, rx_opts, data)
+        # Before `set_application`, the AttributeError from `None` is handled in
+        # `frame_received`
+        self._app.handle_rx(  # type: ignore[union-attr]
+            ieee, nwk, src_ep, dst_ep, cluster, profile, rx_opts, data
+        )
 
-    def _handle_route_record_indicator(self, ieee, src, rx_opts, hops):
+    def _handle_route_record_indicator(
+        self, ieee: xbee_t.EUI64, src: xbee_t.NWK, rx_opts: int, hops: xbee_t.Relays
+    ) -> None:
         """Handle Route Record indicator from a device."""
         LOGGER.debug("_handle_route_record_indicator: %s", (ieee, src, rx_opts, hops))
 
-    def _handle_tx_status(self, frame_id, nwk, tries, tx_status, dsc_status):
+    def _handle_tx_status(
+        self,
+        frame_id: int,
+        nwk: xbee_t.NWK,
+        tries: int,
+        tx_status: xbee_t.TXStatus,
+        dsc_status: xbee_t.DiscoveryStatus,
+    ) -> None:
         LOGGER.debug(
             (
                 "tx_explicit to 0x%04x: %s after %i tries. Discovery Status: %s,"
@@ -481,7 +526,9 @@ class XBee:
         except asyncio.InvalidStateError as ex:
             LOGGER.debug("duplicate tx_status for %s nwk? State: %s", nwk, ex)
 
-    def _handle_registration_status(self, frame_id, status):
+    def _handle_registration_status(
+        self, frame_id: int, status: xbee_t.RegistrationStatus
+    ) -> None:
         (fut,) = self._awaiting.pop(frame_id)
         if status:
             fut.set_exception(RuntimeError(f"Registration Status: {status.name}"))
@@ -490,11 +537,11 @@ class XBee:
 
         fut.set_result(status)
 
-    def set_application(self, app):
+    def set_application(self, app: ControllerApplication) -> None:
         """Set reference to ControllerApplication."""
         self._app = app
 
-    def handle_command_mode_rsp(self, data):
+    def handle_command_mode_rsp(self, data: str) -> None:
         """Handle AT command response in command mode."""
         fut = self._cmd_mode_future
         if fut is None or fut.done():
@@ -506,9 +553,10 @@ class XBee:
         else:
             fut.set_result(data)
 
-    async def command_mode_at_cmd(self, command):
+    async def command_mode_at_cmd(self, command: str) -> bool | str | None:
         """Send AT command in command mode."""
         self._cmd_mode_future = asyncio.Future()
+        assert self._uart is not None
         self._uart.command_mode_send(command.encode("ascii"))
 
         try:
@@ -518,12 +566,12 @@ class XBee:
             LOGGER.debug("Command mode no response to AT '%s' command", command)
             return None
 
-    async def enter_at_command_mode(self):
+    async def enter_at_command_mode(self) -> bool | str | None:
         """Enter command mode."""
         await asyncio.sleep(1.2)  # keep UART quiet for 1s before escaping
         return await self.command_mode_at_cmd("+++")
 
-    async def api_mode_at_commands(self, baudrate):
+    async def api_mode_at_commands(self, baudrate: int) -> bool | None:
         """Configure API and exit AT command mode."""
         cmds = ["ATAP2", "ATWR", "ATCN"]
 
@@ -536,11 +584,13 @@ class XBee:
                 LOGGER.debug("No response to %s cmd", cmd)
                 return None
             LOGGER.debug("Successfully sent %s cmd", cmd)
+        assert self._uart is not None
         self._uart.reset_command_mode()
         return True
 
-    async def init_api_mode(self):
+    async def init_api_mode(self) -> bool | None:
         """Configure API mode on XBee."""
+        assert self._uart is not None
         current_baudrate = self._uart.baudrate
         if await self.enter_at_command_mode():
             LOGGER.debug("Entered AT Command mode at %dbps.", self._uart.baudrate)
@@ -565,7 +615,7 @@ class XBee:
         )
         return False
 
-    def __getattr__(self, item):
+    def __getattr__(self, item: str) -> Callable[..., Any]:
         """Handle supported command requests."""
         if item in COMMAND_REQUESTS:
             return functools.partial(self._command, item)
