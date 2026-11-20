@@ -382,9 +382,9 @@ class XBee:
         """Handle API frame from the device."""
         command = self._commands_by_id[data[0]]
         LOGGER.debug("Frame received: %s", command)
-        data, rest = t.deserialize(data[1:], COMMAND_RESPONSES[command][1])
+        args, rest = t.deserialize(data[1:], COMMAND_RESPONSES[command][1])
         try:
-            getattr(self, f"_handle_{command}")(*data)
+            getattr(self, f"_handle_{command}")(*args)
         except AttributeError:
             LOGGER.error("No '%s' handler. Data: %s", command, binascii.hexlify(data))
 

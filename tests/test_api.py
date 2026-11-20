@@ -314,6 +314,26 @@ def test_frame_received_no_handler(api, monkeypatch):
     assert my_handler.call_count == 0
 
 
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "route_information",
+        "rx",
+        "rx_io_data_long_addr",
+        "extended_status",
+        "node_id_indicator",
+    ],
+)
+def test_frame_received_unhandled_frame_type(api, cmd, caplog):
+    """Test that a frame type without a handler is logged, not raised."""
+    data = bytes([xbee_api.COMMAND_RESPONSES[cmd][0]]) + b"\x01\x02\x03\x04"
+
+    with caplog.at_level("ERROR"):
+        api.frame_received(data)
+
+    assert f"No '{cmd}' handler. Data: b'{data.hex()}'" in caplog.text
+
+
 def _handle_at_response(api, tsn, status, at_response=b""):
     """Call api._handle_at_response."""
     data = (tsn, b"AI", status, at_response)
