@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Coroutine
 import contextlib
 from datetime import UTC, datetime
 import logging
 import math
 import statistics
-from typing import Any
+from typing import Any, cast
 
 import zigpy.application
 import zigpy.config
@@ -27,6 +28,7 @@ import zigpy_xbee
 import zigpy_xbee.api
 import zigpy_xbee.config
 from zigpy_xbee.exceptions import InvalidCommand
+import zigpy_xbee.types
 from zigpy_xbee.types import EUI64, UNKNOWN_IEEE, UNKNOWN_NWK, TXOptions, TXStatus
 
 # how long coordinator would hold message for an end device in 10ms units
@@ -47,19 +49,19 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
     CONFIG_SCHEMA = zigpy_xbee.config.CONFIG_SCHEMA
 
-    def __init__(self, config: dict[str, Any]):
+    def __init__(self, config: dict[str, Any]) -> None:
         """Initialize instance."""
         super().__init__(config=config)
         self._api: zigpy_xbee.api.XBee | None = None
         self.topology.add_listener(self)
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Shutdown application."""
         if self._api:
             await self._api.disconnect()
             self._api = None
 
-    async def connect(self):
+    async def connect(self) -> None:
         """Connect to the device."""
         api = zigpy_xbee.api.XBee(self._config[CONF_DEVICE])
         await api.connect()
@@ -67,12 +69,13 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         self._api = api
 
-    async def start_network(self):
+    async def start_network(self) -> None:
         """Configure the module to work with Zigpy."""
         association_state = await asyncio.wait_for(
             self._get_association_state(), timeout=4
         )
 
+        assert self._api is not None
         # Enable ZDO passthrough
         await self._api._at_command("AO", 0x03)
 
@@ -106,8 +109,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         await self.register_endpoints()
 
-    async def load_network_info(self, *, load_devices=False):
+    async def load_network_info(self, *, load_devices: bool = False) -> None:
         """Load supported parameters of network_info and node_info from the device."""
+        assert self._api is not None
         # Load node info
         node_info = self.state.node_info
         node_info.nwk = zigpy.types.NWK(await self._api._at_command("MY"))
@@ -147,10 +151,14 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
     async def reset_network_info(self) -> None:
         """Reset Zigbee network."""
+        assert self._api is not None
         await self._api._at_command("NR", 0)
 
-    async def write_network_info(self, *, network_info, node_info):
+    async def write_network_info(
+        self, *, network_info: zigpy.state.NetworkInfo, node_info: zigpy.state.NodeInfo
+    ) -> None:
         """Write supported network_info and node_info parameters to the device."""
+        assert self._api is not None
         epid, _ = zigpy.types.uint64_t.deserialize(
             network_info.extended_pan_id.serialize()
         )
@@ -183,16 +191,18 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     ) -> None:
         """Move the coordinator to a new channel."""
         scan_bitmask = 1 << (new_channel - 11)
+        assert self._api is not None
         await self._api._queued_at("SC", scan_bitmask)
 
     async def energy_scan(
         self, channels: zigpy.types.Channels, duration_exp: int, count: int
     ) -> dict[int, float]:
         """Run an energy detection scan and returns the per-channel scan results."""
-        all_results = {}
+        all_results: dict[int, list[int]] = {}
 
         for _ in range(count):
             try:
+                assert self._api is not None
                 results = await self._api._at_command("ED", bytes([duration_exp]))
             except InvalidCommand:
                 LOGGER.warning("Coordinator does not support energy scanning")
@@ -210,7 +220,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             """Logistic function."""
             return L / (1 + math.exp(-k * (x - x_0)))
 
-        def map_rssi_to_energy(rssi: int) -> float:
+        def map_rssi_to_energy(rssi: float) -> float:
             """Remaps RSSI (in dBm) to Energy (0-255)."""
             RSSI_MAX = -5
             RSSI_MIN = -92
@@ -228,7 +238,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         return {channel: energy.get(channel, 0) for channel in channels}
 
-    async def force_remove(self, dev):
+    async def force_remove(self, dev: zigpy.device.Device) -> None:
         """Forcibly remove device from NCP."""
 
     async def add_endpoint(self, descriptor: zdo_t.SimpleDescriptor) -> None:
@@ -236,15 +246,17 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         ep = self._device.add_endpoint(descriptor.endpoint)
         ep.status = zigpy.endpoint.Status.ZDO_INIT
         ep.profile_id = descriptor.profile
-        ep.device_type = descriptor.device_type
+        # zigpy annotates `device_type` with the ZHA profile's device type enum
+        ep.device_type = descriptor.device_type  # type: ignore[assignment]
         for cluster_id in descriptor.input_clusters:
             ep.add_input_cluster(cluster_id)
         for cluster_id in descriptor.output_clusters:
             ep.add_output_cluster(cluster_id)
 
-    async def _get_association_state(self):
+    async def _get_association_state(self) -> int:
         """Wait for Zigbee to start."""
-        state = await self._api._at_command("AI")
+        assert self._api is not None
+        state: int = await self._api._at_command("AI")
         while state == 0xFF:
             LOGGER.debug("Waiting for radio startup...")
             await asyncio.sleep(0.2)
@@ -254,6 +266,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
     async def send_packet(self, packet: zigpy.types.ZigbeePacket) -> None:
         """Send ZigbeePacket via the device."""
         LOGGER.debug("Sending packet %r", packet)
+        # zigpy always sets the destination of outgoing packets
+        assert packet.dst is not None
 
         try:
             device = self.get_device_with_address(packet.dst)
@@ -269,20 +283,19 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             tx_opts |= 0x08  # where did this come from?
 
         long_addr = UNKNOWN_IEEE
-        short_addr = UNKNOWN_NWK
+        short_addr: int = UNKNOWN_NWK
 
+        # The type of `packet.dst.address` follows `packet.dst.addr_mode`
         if packet.dst.addr_mode == zigpy.types.AddrMode.Broadcast:
+            address = cast(zigpy.types.BroadcastAddress, packet.dst.address)
             long_addr = EUI64(
-                [
-                    zigpy.types.uint8_t(b)
-                    for b in packet.dst.address.to_bytes(8, "little")
-                ]
+                [zigpy.types.uint8_t(b) for b in address.to_bytes(8, "little")]
             )
-            short_addr = packet.dst.address
+            short_addr = address
         elif packet.dst.addr_mode == zigpy.types.AddrMode.Group:
-            short_addr = packet.dst.address
+            short_addr = cast(zigpy.types.Group, packet.dst.address)
         elif packet.dst.addr_mode == zigpy.types.AddrMode.IEEE:
-            long_addr = EUI64(packet.dst.address)
+            long_addr = EUI64(cast(zigpy.types.EUI64, packet.dst.address))
         elif device is not None:
             long_addr = EUI64(device.ieee)
             short_addr = device.nwk
@@ -291,6 +304,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 "Cannot send a packet to a device without a known IEEE address"
             )
 
+        assert self._api is not None
         send_req = self._api.tx_explicit(
             long_addr,
             short_addr,
@@ -317,29 +331,41 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
     @zigpy.util.retryable_request()
     def remote_at_command(
-        self, nwk, cmd_name, *args, apply_changes=True, encryption=True
-    ):
+        self,
+        nwk: zigpy.types.NWK,
+        cmd_name: str,
+        *args: Any,
+        apply_changes: bool = True,
+        encryption: bool = True,
+    ) -> Coroutine[Any, Any, Any]:
         """Execute AT command on another XBee module in the network."""
         LOGGER.debug("Remote AT%s command: %s", cmd_name, args)
-        options = zigpy.types.uint8_t(0)
+        options: int = zigpy.types.uint8_t(0)
         if apply_changes:
             options |= 0x02
         if encryption:
             options |= 0x10
         dev = self.get_device(nwk=nwk)
+        assert self._api is not None
         return self._api._remote_at_command(dev.ieee, nwk, options, cmd_name, *args)
 
-    async def permit_ncp(self, time_s=60):
+    async def permit_ncp(self, time_s: int = 60) -> None:
         """Permit join."""
         assert 0 <= time_s <= 254
+        assert self._api is not None
         await self._api._at_command("NJ", time_s)
         await self._api._at_command("AC")
 
     async def permit_with_link_key(
-        self, node: EUI64, link_key: zigpy.types.KeyData, time_s: int = 500, key_type=0
-    ):
+        self,
+        node: zigpy.types.EUI64,
+        link_key: zigpy.types.KeyData,
+        time_s: int = 500,
+        key_type: int = 0,
+    ) -> None:
         """Permits a new device to join with the given IEEE and link key."""
         assert 0x1E <= time_s <= 0xFFFF
+        assert self._api is not None
         await self._api._at_command("KT", time_s)
         reserved = 0xFFFE
         # Key type:
@@ -347,16 +373,24 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         # 1 = Install Code With CRC (I? command of the joining device)
         await self._api.register_joining_device(node, reserved, key_type, link_key)
 
-    def handle_modem_status(self, status):
+    def handle_modem_status(self, status: zigpy_xbee.types.ModemStatus) -> None:
         """Handle changed Modem Status of the device."""
         LOGGER.info("Modem status update: %s (%s)", status.name, status.value)
 
     def handle_rx(
-        self, src_ieee, src_nwk, src_ep, dst_ep, cluster_id, profile_id, rxopts, data
-    ):
+        self,
+        src_ieee: EUI64,
+        src_nwk: zigpy_xbee.types.NWK,
+        src_ep: zigpy.types.uint8_t,
+        dst_ep: zigpy.types.uint8_t,
+        cluster_id: zigpy.types.uint16_t_be,
+        profile_id: zigpy.types.uint16_t_be,
+        rxopts: zigpy.types.uint8_t,
+        data: bytes,
+    ) -> None:
         """Handle receipt of Zigbee data from the device."""
         src = zigpy.types.AddrModeAddress(
-            addr_mode=zigpy.types.AddrMode.NWK, address=src_nwk
+            addr_mode=zigpy.types.AddrMode.NWK, address=zigpy.types.NWK(src_nwk)
         )
 
         dst = zigpy.types.AddrModeAddress(
@@ -375,9 +409,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 src_ep=src_ep,
                 dst=dst,
                 dst_ep=dst_ep,
-                tsn=None,
-                profile_id=profile_id,
-                cluster_id=cluster_id,
+                # XBee doesn't report the APS counter of received frames
+                tsn=None,  # type: ignore[arg-type]
+                # Big-endian integers as parsed from the XBee frame
+                profile_id=profile_id,  # type: ignore[arg-type]
+                cluster_id=cluster_id,  # type: ignore[arg-type]
                 data=zigpy.types.SerializableBytes(data),
             )
         )
@@ -402,7 +438,9 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         self, ieee: zigpy.types.EUI64, routes: list[zdo_t.Route]
     ) -> None:
         """Route update from Mgmt_Rtg_req."""
-        self.create_task(
+        # zigpy's `ControllerApplication._tasks` is a set of futures, which doesn't
+        # match the set of tasks `CreateTaskMixin.create_task` expects
+        self.create_task(  # type: ignore[misc]
             self._routes_updated(ieee, routes), f"routes_updated-ieee={ieee}"
         )
 
@@ -417,6 +455,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 and route.RouteStatus == zdo_t.RouteStatus.Active
             ):
                 device = self.get_device(ieee=ieee)
+                assert self._api is not None
                 rssi = await self._api._at_command("DB")
                 device.radio_details(rssi=-rssi)
                 break
@@ -430,7 +469,9 @@ class XBeeGroup(Groups):
     """
 
     _skip_registry = True
-    cluster_id = 0x0006
+    # zigpy declares these as `Final`, see the `cluster_id` typing problem named in
+    # zigpy/zigpy#1267
+    cluster_id = 0x0006  # type: ignore[assignment, misc]
 
 
 class XBeeGroupResponse(Groups):
@@ -441,14 +482,17 @@ class XBeeGroupResponse(Groups):
     """
 
     _skip_registry = True
-    cluster_id = 0x8006
-    ep_attribute = "xbee_groups_response"
+    # zigpy declares these as `Final`, see the `cluster_id` typing problem named in
+    # zigpy/zigpy#1267
+    cluster_id = 0x8006  # type: ignore[assignment, misc]
+    ep_attribute = "xbee_groups_response"  # type: ignore[misc]
 
     client_commands = {
         **Groups.client_commands,
         0x04: foundation.ZCLCommandDef(
-            "remove_all_response",
-            {"status": foundation.Status},
+            name="remove_all_response",
+            # zigpy compiles dictionary schemas, but annotates only the compiled type
+            schema={"status": foundation.Status},  # type: ignore[arg-type]
             direction=foundation.Direction.Client_to_Server,
         ),
     }
@@ -492,6 +536,7 @@ class XBeeCoordinator(zigpy.device.Device):
         ep = self.add_endpoint(XBEE_ENDPOINT_ID)
         ep.status = zigpy.endpoint.Status.ZDO_INIT
         ep.profile_id = 0xC105
-        ep.device_type = 0x0050
+        # zigpy annotates `device_type` with the ZHA profile's device type enum
+        ep.device_type = 0x0050  # type: ignore[assignment]
         for cluster in (XBeeGroup, XBeeGroupResponse):
             ep.add_input_cluster(cluster.cluster_id, cluster(ep, is_server=True))
