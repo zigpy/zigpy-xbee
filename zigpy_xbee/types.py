@@ -1,6 +1,7 @@
 """Additional types for data parsing."""
 
 import enum
+from typing import Any, Self
 
 import zigpy.types as t
 
@@ -8,12 +9,12 @@ import zigpy.types as t
 class Bytes(bytes):
     """Serializable and deserializable bytes."""
 
-    def serialize(self):
+    def serialize(self) -> bytes:
         """Serialize the class."""
         return self
 
     @classmethod
-    def deserialize(cls, data):
+    def deserialize(cls, data: bytes) -> tuple[Self, bytes]:
         """Deserialize the data into the class."""
         return cls(data), b""
 
@@ -22,7 +23,7 @@ class ATCommand(Bytes):
     """XBee AT command name."""
 
     @classmethod
-    def deserialize(cls, data):
+    def deserialize(cls, data: bytes) -> tuple[Self, bytes]:
         """Deserialize the data into the class."""
         return cls(data[:2]), data[2:]
 
@@ -31,12 +32,12 @@ class EUI64(t.EUI64):
     """EUI64 without prefix."""
 
     @classmethod
-    def deserialize(cls, data):
+    def deserialize(cls, data: bytes) -> tuple[Self, bytes]:
         """Deserialize the data into the class."""
         r, data = super().deserialize(data)
         return cls(r[::-1]), data
 
-    def serialize(self):
+    def serialize(self) -> bytes:
         """Serialize the class."""
         assert self._length == len(self)
         return super().serialize()[::-1]
@@ -45,7 +46,10 @@ class EUI64(t.EUI64):
 class UndefinedEnumMeta(enum.EnumMeta):
     """Meta class for Enum that always has a value."""
 
-    def __call__(cls, value=None, *args, **kwargs):
+    # The fallback member, defined by each enum using this metaclass
+    _UNDEFINED: Any
+
+    def __call__(cls, value: Any = None, *args: Any, **kwargs: Any) -> Any:
         """Return the member, default, or undefined value."""
         if value is None:
             # the 1st enum member is default
@@ -71,21 +75,22 @@ class FrameId(t.uint8_t):
 class NWK(t.uint16_t_be):
     """zigpy.types.NWK but big endian."""
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Get printable representation."""
         return f"0x{self:04x}"
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Get string representation."""
         return f"0x{self:04x}"
 
 
-class Relays(t.LVList, item_type=NWK, length_type=t.uint8_t):
+class Relays(t.LVList[NWK, t.uint8_t]):
     """List of Relays."""
 
 
 UNKNOWN_IEEE = EUI64([t.uint8_t(0xFF) for i in range(0, 8)])
-UNKNOWN_NWK = NWK(0xFFFE)
+# zigpy's integer constructors are unannotated
+UNKNOWN_NWK = NWK(0xFFFE)  # type: ignore[no-untyped-call]
 
 
 class TXStatus(t.uint8_t, UndefinedEnum):
