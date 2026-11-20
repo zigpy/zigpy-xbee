@@ -312,7 +312,9 @@ class XBee:
                 await self._at_command("AP", 2)
             except TimeoutError:
                 if not await self.init_api_mode():
-                    raise APIException("Failed to configure XBee for API mode")
+                    raise APIException(
+                        "Failed to configure XBee for API mode"
+                    ) from None
         except Exception:
             await self.disconnect()
             raise

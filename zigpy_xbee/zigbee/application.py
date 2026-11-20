@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from datetime import UTC, datetime
 import logging
 import math
@@ -166,10 +167,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         await self._api._queued_at("SP", CONF_CYCLIC_SLEEP_PERIOD)
         await self._api._queued_at("SN", CONF_POLL_TIMEOUT)
 
-        try:
+        with contextlib.suppress(InvalidCommand):
             await self._api._queued_at("CE", 1)
-        except InvalidCommand:
-            pass
 
         await self._api._at_command("WR")
 
@@ -197,10 +196,11 @@ class ControllerApplication(zigpy.application.ControllerApplication):
                 results = await self._api._at_command("ED", bytes([duration_exp]))
             except InvalidCommand:
                 LOGGER.warning("Coordinator does not support energy scanning")
-                return {c: 0 for c in channels}
+                return dict.fromkeys(channels, 0)
 
             results = {
-                channel: -int(rssi) for channel, rssi in zip(range(11, 27), results)
+                channel: -int(rssi)
+                for channel, rssi in zip(range(11, 27), results, strict=False)
             }
 
             for channel, rssi in results.items():
@@ -305,10 +305,10 @@ class ControllerApplication(zigpy.application.ControllerApplication):
 
         try:
             v = await asyncio.wait_for(send_req, timeout=TIMEOUT_TX_STATUS)
-        except TimeoutError:
+        except TimeoutError as exc:
             raise zigpy.exceptions.DeliveryError(
                 "Timeout waiting for ACK", status=TXStatus.NETWORK_ACK_FAILURE
-            )
+            ) from exc
 
         if v != TXStatus.SUCCESS:
             raise zigpy.exceptions.DeliveryError(
@@ -366,10 +366,8 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         if src == dst:
             LOGGER.info("handle_rx self addressed")
 
-        try:
+        with contextlib.suppress(KeyError):
             self._device.last_seen = datetime.now(UTC)
-        except KeyError:
-            pass
 
         self.packet_received(
             zigpy.types.ZigbeePacket(
