@@ -102,13 +102,7 @@ class ControllerApplication(zigpy.application.ControllerApplication):
         xbee_dev.status = zigpy.device.Status.ENDPOINTS_INIT
         self.devices[xbee_dev.ieee] = xbee_dev
 
-        # The event must fire only once the coordinator's endpoints exist: listeners
-        # snapshot the device synchronously (`zigpy.appdb` persists its endpoints and
-        # clusters, ZHA emits its signature), so anything registered below would
-        # otherwise be missing from what they see.
         await self.register_endpoints()
-
-        self.listener_event("raw_device_initialized", xbee_dev)
 
     async def load_network_info(self, *, load_devices=False):
         """Load supported parameters of network_info and node_info from the device."""
