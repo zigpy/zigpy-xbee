@@ -467,6 +467,39 @@ async def test_start_network_registers_endpoints(app):
     assert isinstance(ep2.in_clusters[0x0000], Basic)
 
 
+async def test_start_network_coordinator_finalized_by_zigpy(app):
+    """Test the coordinator is left for zigpy to finalize, with all endpoints."""
+    fired = []
+
+    class Listener:
+        def raw_device_initialized(self, device):
+            fired.append(
+                {
+                    ep_id: sorted(ep.in_clusters)
+                    for ep_id, ep in device.endpoints.items()
+                    if ep_id != 0  # the ZDO endpoint has no clusters
+                }
+            )
+
+    app.add_listener(Listener())
+    await _test_start_network(app, ai_status=0x00)
+
+    # `start_network()` itself fires nothing ...
+    assert fired == []
+    assert app._device.original_signature is None
+
+    # ... zigpy's `initialize()` calls `device_initialized()` on the coordinator
+    # right after `start_network()`, which finalizes it and fires the event once
+    app.device_initialized(app._device)
+
+    assert len(fired) == 1
+    assert set(fired[0]) == set(app._device.endpoints) - {0}
+    # zigpy's endpoints, with their clusters -- not just the XBee endpoint
+    assert fired[0][1]
+    assert fired[0][2]
+    assert app._device.original_signature is not None
+
+
 async def test_start_network_no_api_mode(app):
     """Test start network when not in API mode."""
     with pytest.raises(asyncio.TimeoutError):

@@ -100,7 +100,6 @@ class ControllerApplication(zigpy.application.ControllerApplication):
             self, self.state.node_info.ieee, self.state.node_info.nwk
         )
         xbee_dev.status = zigpy.device.Status.ENDPOINTS_INIT
-        self.listener_event("raw_device_initialized", xbee_dev)
         self.devices[xbee_dev.ieee] = xbee_dev
 
         await self.register_endpoints()
